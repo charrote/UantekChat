@@ -1,0 +1,15 @@
+services:
+  uantek-chat:
+    build: .
+    ports:
+      - "9803:80"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - lmstudio-proxy
+
+networks:
+  lmstudio-proxy:
+    external: true

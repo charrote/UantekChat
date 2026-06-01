@@ -1,0 +1,77 @@
+<h2>聊天气泡排版优化方案</h2>
+<p class="subtitle">请选择你倾向的优化方向</p>
+
+<div class="section">
+  <h3>📐 分析发现的当前问题</h3>
+  <div class="pros-cons" style="margin-top:12px">
+    <div class="cons">
+      <h4>中文排版</h4>
+      <ul>
+        <li>字体栈是英文优先，中文渲染不佳</li>
+        <li>行高 1.5 对中文偏紧</li>
+        <li>段落间距为 0，文字全挤在一起</li>
+        <li>字间距对中文阅读不友好</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>层次与布局</h4>
+      <ul>
+        <li>标题/列表/代码/段落间无间距</li>
+        <li>markdown-styles.css 与 index.css 样式冲突</li>
+        <li>缺少垂直节奏感（呼吸感）</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>交互细节</h4>
+      <ul>
+        <li>操作按钮 hover 才可见（移动端不可用）</li>
+        <li>出现动画较简单</li>
+        <li>打字指示器可更精致</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 A：轻量优化（推荐）</h3>
+  <p class="subtitle">最小的改动带来最大收益</p>
+  <ul>
+    <li><strong>字体栈</strong>：加入 PingFang SC / Noto Sans SC 中文优先顺序</li>
+    <li><strong>行高</strong>：正文 1.7 → 更适合中英文混排</li>
+    <li><strong>段间距</strong>：段落间距 0.6em，标题上下间距 0.4em</li>
+    <li><strong>气泡间距</strong>：调整为 20px（原 16px），内边距微调</li>
+    <li><strong>冲突修复</strong>：统一两套 CSS 的间距体系</li>
+    <li><strong>操作按钮</strong>：轻微透明度，而非完全隐藏</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h3>方案 B：中重度重新设计</h3>
+  <p class="subtitle">更全面的排版系统 + 交互升级</p>
+  <ul>
+    <li>包含方案 A 所有改动</li>
+    <li><strong>设计 Token 化</strong>：统一间距/字号/圆角变量体系</li>
+    <li><strong>消息分组</strong>：连续同角色消息合并，去掉多余头像</li>
+    <li><strong>代码块升级</strong>：行号 + 更好的语法高亮主题</li>
+    <li><strong>过渡动效</strong>：消息入场的阶梯动画，打字指示器的波形动画</li>
+    <li><strong>移动端适配</strong>：操作按钮常驻，气泡宽度 95%</li>
+    <li><strong>可读性优化</strong>：较长的 AI 回复自动添加阅读进度指示</li>
+  </ul>
+</div>
+
+<div class="cards" style="margin-top:8px">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>A：轻量优化</h3>
+      <p>最小改动，中文字体 + 间距体系 + 样式统一</p>
+    </div>
+  </div>
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B：全面升级</h3>
+      <p>排版系统化 + 交互升级 + 消息分组 + 动效</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:24px">在浏览器中点击选择，或在终端回复你倾向的方案</p>

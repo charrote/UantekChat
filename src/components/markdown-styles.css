@@ -1,0 +1,344 @@
+.markdown-content {
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: var(--line-height-body);
+  letter-spacing: 0.3px;
+}
+
+.markdown-content * {
+  box-sizing: border-box;
+}
+
+.markdown-content p {
+  margin: 0;
+  padding: 0;
+  word-wrap: break-word;
+  line-height: var(--line-height-body);
+}
+
+.markdown-content > p + p {
+  margin-top: var(--paragraph-spacing);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin: 0;
+  padding: 0;
+  font-weight: 600;
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+}
+
+.markdown-content > h1,
+.markdown-content > h2,
+.markdown-content > h3,
+.markdown-content > h4,
+.markdown-content > h5,
+.markdown-content > h6 {
+  margin-top: var(--heading-spacing-top);
+  margin-bottom: var(--heading-spacing-bottom);
+}
+
+.markdown-content h1 {
+  font-size: 1.5em;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.3);
+  padding-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.markdown-content h2 {
+  font-size: 1.3em;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+  padding-bottom: 5px;
+}
+
+.markdown-content h3 {
+  font-size: 1.15em;
+}
+
+.markdown-content h4 {
+  font-size: 1em;
+}
+
+.markdown-content h5 {
+  font-size: 0.9em;
+}
+
+.markdown-content h6 {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.markdown-content blockquote {
+  margin: var(--block-spacing) 0;
+  padding: 10px 16px;
+  color: var(--text-secondary);
+  background-color: rgba(139, 92, 246, 0.08);
+  border-left: 4px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  line-height: var(--line-height-body);
+}
+
+.markdown-content blockquote p {
+  margin: 0.3em 0;
+}
+
+.markdown-content > blockquote p + p {
+  margin-top: var(--paragraph-spacing);
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: var(--paragraph-spacing) 0;
+  padding: 0 0 0 1.2em;
+  line-height: var(--line-height-body);
+}
+
+.markdown-content > p + ul,
+.markdown-content > p + ol {
+  margin-top: 0;
+}
+
+.markdown-content > ul + p,
+.markdown-content > ol + p {
+  margin-top: var(--paragraph-spacing);
+}
+
+.markdown-content li {
+  margin: 0;
+  padding: 0;
+  line-height: var(--line-height-body);
+  position: relative;
+}
+
+.markdown-content li + li {
+  margin-top: var(--list-spacing);
+}
+
+.markdown-content li > p {
+  margin: 0;
+  padding: 0;
+}
+
+.markdown-content ul ul,
+.markdown-content ul ol,
+.markdown-content ol ul,
+.markdown-content ol ol {
+  margin: 0;
+  padding: 0 0 0 1.2em;
+}
+
+.markdown-content code {
+  padding: 2px 6px;
+  margin: 0 0.1em;
+  font-size: 0.88em;
+  background-color: rgba(139, 92, 246, 0.15);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  color: #c7d2fe;
+}
+
+.markdown-content pre {
+  margin: var(--block-spacing) 0;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.markdown-content pre code {
+  display: block;
+  padding: 14px 16px;
+  margin: 0;
+  font-size: 0.875em;
+  background-color: var(--bg-secondary);
+  border-radius: 0;
+  line-height: var(--line-height-code);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.markdown-content pre .code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 14px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.markdown-content pre .code-header span {
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 500;
+}
+
+.markdown-content table {
+  margin: var(--block-spacing) 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-radius: 8px;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: 8px 12px;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  text-align: left;
+  line-height: var(--line-height-body);
+}
+
+.markdown-content th {
+  background-color: rgba(139, 92, 246, 0.12);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.markdown-content tr {
+  background-color: transparent;
+}
+
+.markdown-content tr:nth-child(2n) {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: var(--block-spacing) 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.markdown-content a {
+  color: #a5b4fc;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+  border-bottom-color: #a5b4fc;
+}
+
+.markdown-content hr {
+  height: 1px;
+  margin: var(--block-spacing) 0;
+  background-color: rgba(139, 92, 246, 0.3);
+  border: none;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.markdown-content strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content del {
+  color: var(--text-secondary);
+  text-decoration-line: line-through;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+}
+
+.markdown-content ul ul {
+  list-style-type: circle;
+}
+
+.markdown-content ul ul ul {
+  list-style-type: square;
+}
+
+.markdown-content input[type='checkbox'] {
+  margin-right: 0.6em;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+
+.markdown-content > :first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content .task-list-item {
+  list-style: none;
+  margin-left: -1.2em;
+}
+
+.markdown-content .mermaid {
+  margin: var(--block-spacing) 0;
+  padding: 16px;
+  background: #1e1e2e;
+  border-radius: 10px;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-content .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-content .mermaid-fallback {
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.markdown-content .mermaid-fallback::before {
+  display: block;
+  padding: 6px 14px;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+  content: 'Diagram syntax error';
+}
+
+.markdown-content .mermaid-fallback code {
+  display: block;
+  padding: 14px 16px;
+  margin: 0;
+  font-size: 0.875em;
+  background-color: var(--bg-secondary);
+  border-radius: 0;
+  line-height: var(--line-height-code);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  text-align: left;
+}

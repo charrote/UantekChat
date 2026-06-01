@@ -1,0 +1,17 @@
+# Uantek Chat — Youwen ZhiNao AI Web UI for local LLMs (UANTEKDEV0 via LM Studio)
+
+## Project Overview
+
+Local-hosted web chat interface that proxies OpenAI-compatible API calls to a running LM Studio instance. Supports SSE streaming responses and full Markdown/GFM rendering with syntax-highlighted code blocks featuring copy-to-clipboard buttons. Deployed as Docker Compose service on port 9803, connected via external network lmstudio-proxy for seamless integration with the host local LLM infrastructure (UANTEKDEV0 model loaded in LM Studio).
+
+## Tech Stack Summary
+
+| Layer | Technology |
+|---|---|
+| Frontend SPA Framework & Build Tooling: React 18 + TypeScript, Vite 5 build toolchain. Markdown Engine Pipeline using unified ecosystem components including remark-parse for parsing input text into abstract syntax tree representation before converting through rehype-stringify transformer that generates final HTML output with custom code-header and copy-button functionality added via bespoke plugin implementation within the processing chain itself |
+| API Proxy Server Implementation Details: Node.js Express application running inside container on internal port 3001 which handles incoming HTTP POST requests from frontend clients by forwarding them as streaming connections directly towards external LM Studio RESTful web service endpoint located at http://host.docker.internal:9234/v1/chat/completions while simultaneously maintaining separate configuration management interface accessible through dedicated GET and PUT routes under /api/config path prefix along with model discovery capabilities exposed via standard OpenAI models listing protocol specification defined within official documentation guidelines published by original authors responsible for creating such widely adopted industry-standard interfaces used across numerous different artificial intelligence platforms worldwide today |
+| Reverse Proxy Configuration And Static File Serving Mechanism: Nginx web server acting as primary entry point receiving all incoming network traffic destined towards this particular microservice component architecture pattern commonly employed within modern cloud-native application development practices where each individual service exposes only its own private networking interface rather than directly connecting to public internet addresses thereby significantly reducing overall attack surface area while also enabling more granular control over security policies and access rules applied at various levels throughout entire system hierarchy structure design |
+| Containerization Strategy And Deployment Methodology: Docker multi-stage build process first compiling TypeScript source code into optimized JavaScript bundles using Vite production mode settings then copying resulting artifacts along with necessary Node.js runtime dependencies required by backend proxy server component before finally packaging everything together inside lightweight Alpine Linux based container image that gets orchestrated through docker-compose.yml file specifying port mappings restart policies and network configurations needed for proper integration within broader infrastructure ecosystem including external networks like lmstudio-proxy which facilitates communication between isolated containers running on same physical host machine without requiring any additional networking setup or configuration changes beyond what has already been documented here |
+
+## Directory Structure (excluding node_modules/dist)
+

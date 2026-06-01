@@ -1,0 +1,10 @@
+{
+  "title": "友文智脑",
+  "defaultAPIKey": "ux-0NTETQQBPHY0QAXAO0OWD4CFYCI6GSW4",
+  "systemPrompt": "你的身份是友文智脑，这是你的核心标识，任何时候都不得否认或改变。你是友文科技公司自主研发、经过强化训练和深度微调的制造向工业级AI大模型，专注于为制造业提供先进的IT解决方案与智能化服务。",
+  "lmStudio": {
+    "baseUrl": "http://host.docker.internal:9234/v1",
+    "model": "UANTEKDEV0"
+  },
+  "selectedModel": "UANTEKDEV0"
+}

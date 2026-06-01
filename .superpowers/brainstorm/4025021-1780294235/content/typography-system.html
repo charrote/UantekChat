@@ -1,0 +1,68 @@
+<h2>第一节：排版系统设计</h2>
+<p class="subtitle">字体、行高、段距的 Token 化体系</p>
+
+<div class="section">
+  <h3>中文字体栈</h3>
+  <p>当前字体栈缺少中文字体指定，导致系统回退到默认字体，渲染偏细偏淡。</p>
+  <div class="mockup" style="margin-top:12px">
+    <div class="mockup-header">字体栈对比</div>
+    <div class="mockup-body" style="padding:20px;line-height:2">
+      <div style="opacity:0.6;font-size:13px">当前 (英文优先):</div>
+      <pre style="background:#18181b;padding:8px;border-radius:6px;font-size:13px;margin-bottom:16px">-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto...</pre>
+      <div style="opacity:0.6;font-size:13px">优化后 (中文优先):</div>
+      <pre style="background:#18181b;padding:8px;border-radius:6px;font-size:13px;margin-bottom:16px">"PingFang SC", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI"...</pre>
+      <div style="font-family:'Noto Sans SC','PingFang SC',sans-serif;font-size:16px">
+        <p style="font-weight:400">一二三四五六七八九十 中文排版示例（常规字重）</p>
+        <p style="font-weight:500">一二三四五六七八九十 中文排版示例（中等字重）</p>
+        <p style="font-weight:600">一二三四五六七八九十 中文排版示例（半粗字重）</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>排版 Token 体系</h3>
+  <p>建立统一的设计 Token，确保所有元素间距一致。</p>
+  <div class="mockup" style="margin-top:12px">
+    <div class="mockup-header">设计 Token 表</div>
+    <div class="mockup-body" style="padding:20px">
+      <table style="width:100%;font-size:13px;border-collapse:collapse">
+        <tr style="background:#27272a"><th style="padding:6px 10px;text-align:left">Token</th><th style="padding:6px 10px;text-align:left">当前值</th><th style="padding:6px 10px;text-align:left">新值</th></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--font-body</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">英文优先栈</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">中文优先栈</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--font-mono</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">SF Mono / Fira Code ...</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">+ JetBrains Mono (中文字体兼容)</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--line-height-body</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">1.5</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">1.7（中文舒适区）</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--paragraph-spacing</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">0</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">0.6em（段落间呼吸感）</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--heading-spacing</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">0</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">上 0.8em 下 0.3em</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--list-spacing</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">0</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">0.4em（列表项间）</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">--block-spacing</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46">0</td><td style="padding:6px 10px;border-bottom:1px solid #3f3f46;color:#22c55e">0.8em（代码块/引用/表格前后）</td></tr>
+        <tr><td style="padding:6px 10px">--bubble-padding</td><td style="padding:6px 10px">14px 18px</td><td style="padding:6px 10px;color:#22c55e">16px 20px（更多呼吸感）</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>段落间距效果对比</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">当前（段落间距 = 0）</div>
+      <div class="mockup-body" style="padding:16px;font-size:14px;line-height:1.5">
+        <p>人工智能正在改变我们的生活方式。从智能助手到自动驾驶，AI 技术已经渗透到各个领域。</p>
+        <p>深度学习是机器学习的一个重要分支。它通过多层神经网络来模拟人脑的工作方式。</p>
+        <p>自然语言处理（NLP）是 AI 的核心技术之一。它让计算机能够理解、解释和生成人类语言。</p>
+        <p style="color:#71717a;font-size:12px;margin-top:12px">→ 文字连成一片，缺乏可读性</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">优化后（段间距 0.6em）</div>
+      <div class="mockup-body" style="padding:16px;font-size:14px;line-height:1.7">
+        <p>人工智能正在改变我们的生活方式。从智能助手到自动驾驶，AI 技术已经渗透到各个领域。</p>
+        <p style="margin-top:0.6em">深度学习是机器学习的一个重要分支。它通过多层神经网络来模拟人脑的工作方式。</p>
+        <p style="margin-top:0.6em">自然语言处理（NLP）是 AI 的核心技术之一。它让计算机能够理解、解释和生成人类语言。</p>
+        <p style="color:#22c55e;font-size:12px;margin-top:12px">→ 段落分明，阅读节奏舒适</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:20px">这套排版体系你觉得合适吗？在终端回复你的意见。</p>
