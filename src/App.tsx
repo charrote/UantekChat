@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MarkdownRenderer } from './components/MarkdownRenderer'
+import { BookStackPanel } from './components/BookStackPanel'
 
 interface Message {
   id: string
@@ -20,12 +21,14 @@ interface Settings {
   enableApiKey: boolean
   apiKey: string
   selectedModel: string
+  isDarkMode: boolean
 }
 
 const defaultSettings: Settings = {
   enableApiKey: false,
   apiKey: '',
-  selectedModel: ''
+  selectedModel: '',
+  isDarkMode: true
 }
 
 function App() {
@@ -51,6 +54,11 @@ function App() {
   const [showEditTitleModal, setShowEditTitleModal] = useState(false)
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null)
   const [isComposing, setIsComposing] = useState(false)
+  const [bookStackPanelOpen, setBookStackPanelOpen] = useState(() => {
+    const saved = localStorage.getItem('bookstack-panel-open')
+    return saved ? JSON.parse(saved) : false
+  })
+  const [bookStackUrl, setBookStackUrl] = useState<string | undefined>(undefined)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -70,10 +78,31 @@ function App() {
   }, [settings])
 
   useEffect(() => {
+    localStorage.setItem('bookstack-panel-open', JSON.stringify(bookStackPanelOpen))
+  }, [bookStackPanelOpen])
+
+  // Apply theme to <html> element so CSS variables take effect immediately.
+  useEffect(() => {
+    document.documentElement.classList.toggle('light-theme', !settings.isDarkMode)
+  }, [settings.isDarkMode])
+
+  useEffect(() => {
     if (autoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [activeConversation?.messages, autoScroll])
+
+  // Listen for BookStack navigation messages from markdown links
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'bookstack-navigate' && event.data?.url) {
+        setBookStackUrl(event.data.url)
+        setBookStackPanelOpen(true)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
 
   const handleScroll = () => {
     const chatContainer = document.querySelector('.chat-container')
@@ -128,6 +157,10 @@ function App() {
   const handleConversationClick = (id: string) => {
     setActiveConversationId(id)
     closeSidebar()
+  }
+
+  const toggleBookStackPanel = () => {
+    setBookStackPanelOpen((prev: boolean) => !prev)
   }
 
   const sendMessage = async () => {
@@ -479,6 +512,18 @@ const stopGenerating = () => {
             </svg>
             <span>{modelName || 'Unknown'}</span>
           </div>
+          {/* BookStack panel toggle in header */}
+          <button
+            className="bookstack-header-toggle"
+            onClick={toggleBookStackPanel}
+            title={bookStackPanelOpen ? '收起知识库面板' : '打开知识库面板'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            <span>知识库</span>
+          </button>
         </header>
 
         <div className="chat-container" onScroll={handleScroll}>
@@ -633,6 +678,13 @@ const stopGenerating = () => {
           </div>
         </div>
       </main>
+
+      <BookStackPanel
+        isOpen={bookStackPanelOpen}
+        onToggle={toggleBookStackPanel}
+        initialUrl={bookStackUrl}
+        onUrlChange={setBookStackUrl}
+      />
 
       {showEditTitleModal && editingConversation && (
         <div className="modal-overlay" onClick={() => setShowEditTitleModal(false)}>

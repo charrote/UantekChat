@@ -38,6 +38,28 @@
   --bubble-gap: 20px;
 }
 
+/* ── Light Theme Variables (applied via .light-theme on <html>) ───────── */
+.light-theme :root,
+.html-light :root {
+  --sidebar-bg: #f4f4f5;
+  --sidebar-hover: #e4e4e7;
+  --sidebar-active: #d4d4d8;
+  --sidebar-text: #18181b;
+  --sidebar-muted: #a1a1aa;
+  --bg-primary: #fafafa;
+  --bg-secondary: #f4f4f5;
+  --bg-tertiary: #e4e4e7;
+  --bg-input: #ffffff;
+  --text-primary: #09090b;
+  --text-secondary: #3f3f46;
+  --text-muted: #a1a1aa;
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-light: rgba(124, 58, 237, 0.1);
+  --border: #e4e4e7;
+  --border-light: #f4f4f5;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -232,6 +254,7 @@ body {
   flex-direction: column;
   min-width: 0;
   height: 100%;
+  position: relative;
 }
 
 .chat-header {
@@ -1333,6 +1356,237 @@ body {
   transform: translateX(24px);
 }
 
+/* ── BookStack Panel Styles ──────────────────────────────────────────── */
+
+.bookstack-toggle-btn {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.bookstack-toggle-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  transform: translateY(-50%) translateX(-2px);
+}
+
+.bookstack-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  height: 100%;
+  position: relative;
+  animation: slide-in-right 0.25s ease-out;
+}
+
+.bookstack-panel.resizing {
+  transition: none;
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.bookstack-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bookstack-resize-handle:hover .resize-indicator,
+.bookstack-resize-handle:active .resize-indicator {
+  background: var(--accent);
+}
+
+.resize-indicator {
+  width: 2px;
+  height: 40px;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 0.2s;
+}
+
+.bookstack-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.bookstack-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bookstack-panel-title svg {
+  color: var(--accent);
+}
+
+.bookstack-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bookstack-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bookstack-action-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.bookstack-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.bookstack-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.bookstack-search svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.bookstack-search input {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.bookstack-search input:focus {
+  border-color: var(--accent);
+}
+
+.bookstack-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.bookstack-search-btn {
+  padding: 6px 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.bookstack-search-btn:hover {
+  background: var(--accent-hover);
+}
+
+.bookstack-iframe-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.bookstack-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg-primary);
+}
+
+/* ── Source link styles in markdown ──────────────────────────────────── */
+
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.source-link:hover {
+  background: var(--accent-light);
+  border-bottom-style: solid;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin: 0 -4px;
+}
+
+.source-link svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   body {
     height: 100vh;
@@ -1474,6 +1728,15 @@ body {
     width: 28px;
     height: 28px;
   }
+
+  /* Hide BookStack panel on mobile */
+  .bookstack-panel {
+    display: none !important;
+  }
+
+  .bookstack-toggle-btn {
+    display: none !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1537,6 +1800,31 @@ body {
   .menu-toggle {
     display: none;
   }
+}
+
+.bookstack-header-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+}
+
+.bookstack-header-toggle:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.bookstack-header-toggle svg {
+  flex-shrink: 0;
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

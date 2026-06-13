@@ -6,6 +6,34 @@ import gfm from 'remark-gfm'
 import { visit } from 'unist-util-visit'
 import type { Element, Root } from 'hast'
 
+const BOOKSTACK_BASE_URL = 'http://localhost:6875'
+
+/**
+ * Check if a URL is a BookStack internal link
+ */
+function isBookStackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.hostname === 'localhost' && parsed.port === '6875'
+  } catch {
+    // Relative URLs starting with /books/, /shelves/, /pages/ etc.
+    return url.startsWith('/books/') ||
+           url.startsWith('/shelves/') ||
+           url.startsWith('/pages/') ||
+           url.startsWith('/chapters/') ||
+           url.startsWith('/search')
+  }
+}
+
+/**
+ * Convert a URL to absolute BookStack URL for panel navigation
+ */
+function toBookStackUrl(url: string): string {
+  if (url.startsWith('http')) return url
+  if (url.startsWith('/')) return `${BOOKSTACK_BASE_URL}${url}`
+  return `${BOOKSTACK_BASE_URL}/${url}`
+}
+
 function rehypeMermaid() {
   return (tree: Root) => {
     visit(tree, 'element', (node: Element) => {
@@ -87,6 +115,61 @@ function rehypeCodeCopyButton() {
   }
 }
 
+/**
+ * Transform BookStack source links to open in the right panel
+ */
+function rehypeBookStackLinks() {
+  return (tree: Root) => {
+    visit(tree, 'element', (node: Element) => {
+      if (node.tagName === 'a' && node.properties?.href) {
+        const href = String(node.properties.href)
+        if (isBookStackUrl(href)) {
+          const absoluteUrl = toBookStackUrl(href)
+          node.properties = {
+            ...node.properties,
+            className: ['source-link'],
+            'data-bookstack-url': absoluteUrl,
+            href: 'javascript:void(0)',
+            onclick: `window.postMessage({type:'bookstack-navigate',url:'${absoluteUrl.replace(/'/g, "\\'")}'},'*')`
+          }
+          // Add book icon as child if not already present
+          const hasIcon = node.children.some(
+            (child: any) => child.type === 'element' && child.tagName === 'svg'
+          )
+          if (!hasIcon) {
+            node.children.unshift({
+              type: 'element',
+              tagName: 'svg',
+              properties: {
+                width: '12',
+                height: '12',
+                viewBox: '0 0 24 24',
+                fill: 'none',
+                stroke: 'currentColor',
+                strokeWidth: '2'
+              },
+              children: [
+                {
+                  type: 'element',
+                  tagName: 'path',
+                  properties: { d: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20' },
+                  children: []
+                },
+                {
+                  type: 'element',
+                  tagName: 'path',
+                  properties: { d: 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z' },
+                  children: []
+                }
+              ]
+            } as any)
+          }
+        }
+      }
+    })
+  }
+}
+
 const processor = unified()
   .use(parse)
   .use(gfm)
@@ -96,6 +179,7 @@ const processor = unified()
   })
   .use(rehypeMermaid)
   .use(rehypeCodeCopyButton)
+  .use(rehypeBookStackLinks)
   .use(rehypeStringify, {
     allowDangerousHtml: true,
     allowDangerousCharacters: true
