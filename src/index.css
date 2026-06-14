@@ -39,8 +39,8 @@
 }
 
 /* ── Light Theme Variables (applied via .light-theme on <html>) ───────── */
-.light-theme :root,
-.html-light :root {
+.light-theme:root,
+html.html-light:root {
   --sidebar-bg: #f4f4f5;
   --sidebar-hover: #e4e4e7;
   --sidebar-active: #d4d4d8;
@@ -284,30 +284,61 @@ body {
   margin-left: auto;
 }
 
-/* ── Theme Toggle Button ──────────────────────────────────────────── */
 .theme-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--bg-secondary);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-toggle-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: radial-gradient(circle at center, var(--accent-light) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.25s;
 }
 
 .theme-toggle-btn:hover {
-  background: var(--bg-tertiary);
   color: var(--text-primary);
   border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn:hover::before {
+  opacity: 1;
 }
 
 .theme-toggle-btn:active {
-  transform: scale(0.95);
+  transform: translateY(0) scale(0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.theme-toggle-btn svg {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle-btn:hover svg {
+  transform: scale(1.1);
 }
 
 .chat-container {
