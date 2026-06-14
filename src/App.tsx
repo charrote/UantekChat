@@ -1,11 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import { MarkdownRenderer } from './components/MarkdownRenderer'
 import { BookStackPanel } from './components/BookStackPanel'
+import MultiModalInput from './components/MultiModalInput'
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  attachments?: {
+    type: string
+    previewUrl?: string
+    base64?: string
+    file?: { name: string }
+  }[]
 }
 
 interface Conversation {
@@ -15,20 +22,29 @@ interface Conversation {
   createdAt: Date
 }
 
-// State for the Top button modal
-
 interface Settings {
   enableApiKey: boolean
   apiKey: string
   selectedModel: string
   isDarkMode: boolean
+  contextLength: number
 }
 
 const defaultSettings: Settings = {
   enableApiKey: false,
   apiKey: '',
   selectedModel: '',
-  isDarkMode: true
+  isDarkMode: true,
+  contextLength: 4096
+}
+
+const CONTEXT_LENGTH_OPTIONS = [1024, 4096, 8192, 16384, 32768]
+
+function formatContextLength(value: number): string {
+  if (value >= 1024 && value % 1024 === 0) {
+    return `${value / 1024}K`
+  }
+  return `${value}`
 }
 
 function App() {
@@ -41,10 +57,9 @@ function App() {
   })
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem('settings')
-    return saved ? JSON.parse(saved) : defaultSettings
+    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings
   })
   const [showSettings, setShowSettings] = useState(false)
-  const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [modelName, setModelName] = useState('')
   const [modelsList, setModelsList] = useState<string[]>([])
@@ -53,7 +68,6 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showEditTitleModal, setShowEditTitleModal] = useState(false)
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null)
-  const [isComposing, setIsComposing] = useState(false)
   const [bookStackPanelOpen, setBookStackPanelOpen] = useState(() => {
     const saved = localStorage.getItem('bookstack-panel-open')
     return saved ? JSON.parse(saved) : false
@@ -61,7 +75,6 @@ function App() {
   const [bookStackUrl, setBookStackUrl] = useState<string | undefined>(undefined)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const activeConversation = conversations.find(c => c.id === activeConversationId)
 
@@ -81,7 +94,6 @@ function App() {
     localStorage.setItem('bookstack-panel-open', JSON.stringify(bookStackPanelOpen))
   }, [bookStackPanelOpen])
 
-  // Apply theme to <html> element so CSS variables take effect immediately.
   useEffect(() => {
     document.documentElement.classList.toggle('light-theme', !settings.isDarkMode)
   }, [settings.isDarkMode])
@@ -92,7 +104,6 @@ function App() {
     }
   }, [activeConversation?.messages, autoScroll])
 
-  // Listen for BookStack navigation messages from markdown links
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'bookstack-navigate' && event.data?.url) {
@@ -119,7 +130,7 @@ function App() {
 
   const saveTitle = () => {
     if (editingConversation && editingConversation.title.trim()) {
-      setConversations(prev => prev.map(c => 
+      setConversations(prev => prev.map(c =>
         c.id === editingConversation.id ? { ...c, title: editingConversation.title.trim() } : c
       ))
     }
@@ -159,19 +170,21 @@ function App() {
     closeSidebar()
   }
 
-  const toggleBookStackPanel = () => {
-    setBookStackPanelOpen((prev: boolean) => !prev)
-  }
-
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return
+  const sendMessage = async (content: string, attachments?: {
+    type: string
+    previewUrl?: string
+    base64?: string
+    file?: { name: string }
+  }[]) => {
+    if (!content.trim() && (!attachments || attachments.length === 0)) return
 
     setAutoScroll(true)
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim()
+      content: content.trim(),
+      attachments
     }
 
     let conversation = activeConversation
@@ -180,7 +193,7 @@ function App() {
     if (!conversation) {
       const newConversation: Conversation = {
         id: Date.now().toString(),
-        title: input.trim().slice(0, 8),
+        title: content.trim().slice(0, 8),
         messages: [userMessage],
         createdAt: new Date()
       }
@@ -188,14 +201,13 @@ function App() {
       setActiveConversationId(newConversation.id)
       conversation = newConversation
     } else {
-      setConversations(prev => prev.map(c => 
-        c.id === conversation!.id 
+      setConversations(prev => prev.map(c =>
+        c.id === conversation!.id
           ? { ...c, messages: [...c.messages, userMessage] }
           : c
       ))
     }
 
-    setInput('')
     setIsLoading(true)
 
     const assistantMessageId = (Date.now() + 1).toString()
@@ -205,15 +217,23 @@ function App() {
       content: ''
     }
 
-    setConversations(prev => prev.map(c => 
-      c.id === conversation!.id 
+    setConversations(prev => prev.map(c =>
+      c.id === conversation!.id
         ? { ...c, messages: [...c.messages, assistantMessage] }
         : c
     ))
 
+    // 截断对话历史，保留最近 20 条消息，防止请求体过大
+    const MAX_HISTORY_MESSAGES = 20
+    const trimmedHistory = conversation.messages.slice(-MAX_HISTORY_MESSAGES)
+    const messagesToSend = [
+      ...trimmedHistory.map(m => ({ role: m.role, content: m.content, attachments: m.attachments })),
+      { role: 'user', content: userMessage.content, attachments: userMessage.attachments }
+    ]
+
     try {
       abortControllerRef.current = new AbortController()
-      
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -221,10 +241,7 @@ function App() {
         },
         body: JSON.stringify({
           apiKey: settings.enableApiKey ? settings.apiKey : '',
-          messages: [
-            ...conversation.messages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: userMessage.content }
-          ]
+          messages: messagesToSend
         }),
         signal: abortControllerRef.current.signal
       })
@@ -258,12 +275,12 @@ function App() {
               const content = parsed.choices?.[0]?.delta?.content || ''
               if (content) {
                 fullContent += content
-                setConversations(prev => prev.map(c => 
-                  c.id === conversation!.id 
-                    ? { 
-                        ...c, 
-                        messages: c.messages.map(m => 
-                          m.id === assistantMessageId 
+                setConversations(prev => prev.map(c =>
+                  c.id === conversation!.id
+                    ? {
+                        ...c,
+                        messages: c.messages.map(m =>
+                          m.id === assistantMessageId
                             ? { ...m, content: fullContent }
                             : m
                         )
@@ -272,12 +289,12 @@ function App() {
                 ))
               }
             } catch (e) {
+              // skip
             }
           }
         }
       }
 
-      // Title management
       const existingUserMsgs = conversation.messages.filter(m => m.role === 'user').length
       const totalUserMsgs = isNewChat ? 1 : existingUserMsgs + 1
 
@@ -298,12 +315,12 @@ function App() {
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        setConversations(prev => prev.map(c => 
-          c.id === conversation!.id 
-            ? { 
-                ...c, 
-                messages: c.messages.map(m => 
-                  m.id === assistantMessageId 
+        setConversations(prev => prev.map(c =>
+          c.id === conversation!.id
+            ? {
+                ...c,
+                messages: c.messages.map(m =>
+                  m.id === assistantMessageId
                     ? { ...m, content: '[已终止]' }
                     : m
                 )
@@ -311,12 +328,12 @@ function App() {
             : c
         ))
       } else {
-        setConversations(prev => prev.map(c => 
-          c.id === conversation!.id 
-            ? { 
-                ...c, 
-                messages: c.messages.map(m => 
-                  m.id === assistantMessageId 
+        setConversations(prev => prev.map(c =>
+          c.id === conversation!.id
+            ? {
+                ...c,
+                messages: c.messages.map(m =>
+                  m.id === assistantMessageId
                     ? { ...m, content: `错误: ${error instanceof Error ? error.message : '请求失败'}` }
                     : m
                 )
@@ -329,12 +346,6 @@ function App() {
       abortControllerRef.current = null
     }
   }
-
-const stopGenerating = () => {
-  if (abortControllerRef.current) {
-    abortControllerRef.current.abort()
-  }
-}
 
   const summarizeTitle = async (convId: string, msgs: { role: string; content: string }[]) => {
     try {
@@ -360,7 +371,7 @@ const stopGenerating = () => {
           try {
             const c = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content || ''
             title += c
-          } catch { /* skip parse errors */ }
+          } catch { /* skip */ }
         }
       }
       if (title.trim()) {
@@ -368,14 +379,7 @@ const stopGenerating = () => {
           c.id === convId ? { ...c, title: title.trim().slice(0, 8) } : c
         ))
       }
-    } catch { /* silent fail for title update */ }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-      e.preventDefault()
-      sendMessage()
-    }
+    } catch { /* silent fail */ }
   }
 
   const handleSettingsSave = async () => {
@@ -395,7 +399,7 @@ const stopGenerating = () => {
   useEffect(() => {
     const saved = localStorage.getItem('lmstudio-settings')
     if (saved) {
-      setSettings(JSON.parse(saved))
+      setSettings({ ...defaultSettings, ...JSON.parse(saved) })
     }
     fetch('/api/config')
       .then(res => res.json())
@@ -449,7 +453,7 @@ const stopGenerating = () => {
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {conv.title}
               </span>
-              <button 
+              <button
                 className="edit-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -461,8 +465,8 @@ const stopGenerating = () => {
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                 </svg>
               </button>
-              <button 
-                className="delete-btn" 
+              <button
+                className="delete-btn"
                 onClick={(e) => deleteConversation(conv.id, e)}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -499,293 +503,160 @@ const stopGenerating = () => {
           {sidebarOpen && (
             <button className="menu-toggle" onClick={toggleSidebar}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="15 18 9 12 15 6"></polyline>
+                <line x1="17" y1="17" x2="7" y2="7"></line>
+                <polyline points="7 17 17 7 17 17 7 7"></polyline>
               </svg>
             </button>
           )}
-          <h1 className="chat-title" onClick={() => activeConversation && openEditTitleModal(activeConversation)}>
-            {activeConversation?.title || appTitle}
-          </h1>
+          <h1 className="chat-title">{appTitle}</h1>
+
           <div className="header-model-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-            <span>{modelName || 'Unknown'}</span>
+            <span>{modelsList.length > 0 ? '🔌 LM Studio' : '⚠️ 未连接'}</span>
+            {modelName && <span>{modelName}</span>}
           </div>
-          {/* BookStack panel toggle in header */}
-          <button
-            className="bookstack-header-toggle"
-            onClick={toggleBookStackPanel}
-            title={bookStackPanelOpen ? '收起知识库面板' : '打开知识库面板'}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-            <span>知识库</span>
-          </button>
         </header>
 
         <div className="chat-container" onScroll={handleScroll}>
-          {!activeConversation?.messages.length ? (
-            <div className="empty-state">
-              <h2>开始新对话</h2>
-              <p>发送消息开始与友文智脑交流</p>
-            </div>
-          ) : (
-            activeConversation.messages.map((message, index) => {
-              const prevMessage = index > 0 ? activeConversation.messages[index - 1] : null
-              const isGrouped = prevMessage?.role === message.role
-              return (
-                <div key={message.id} className={`message ${message.role}${isGrouped ? ' grouped' : ''}`}>
-                  {!isGrouped && (
-                    <div className="avatar-wrapper">
-                      <div className="message-avatar">
-                        {message.role === 'user' ? (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                          </svg>
-                        ) : (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5 2.5 2.5 0 0 0-2.5-2.5z"/>
-                          </svg>
-                        )}
+          {activeConversation?.messages.map(m => (
+            <div key={m.id} className={`message-wrapper ${m.role}`}>
+              <div className="message-content">
+                <MarkdownRenderer content={m.content} />
+                {m.attachments && m.attachments.length > 0 && (
+                  <div className="message-attachments">
+                    {m.attachments.map((a, i) => (
+                      <div key={i} className="message-attachment-item">
+                        {a.type === 'image' ? <img src={a.previewUrl || a.base64!} alt="attachment" /> : `📄 ${a.file?.name}`}
                       </div>
-                      {message.role === 'assistant' && (
-                        <span className="avatar-name">{appTitle}</span>
-                      )}
-                    </div>
-                  )}
-                  <div className="message-main">
-                      <div className="message-content">
-                        {message.role === 'assistant' && !message.content && isLoading ? (
-                          <div className="typing-indicator">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                          </div>
-                        ) : message.role === 'assistant' ? (
-                          <MarkdownRenderer content={message.content} />
-                        ) : (
-                          <div className="message-text">{message.content}</div>
-                        )}
-                      </div>
-                    {message.role === 'assistant' && message.content && (
-                      <div className="message-actions">
-                        <button className="action-btn" title="点赞" onClick={() => {}}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
-                          </svg>
-                        </button>
-                        <button className="action-btn" title="不喜欢" onClick={() => {}}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
-                          </svg>
-                        </button>
-                        <button className="action-btn" title="复制" onClick={async () => {
-                          const content = message.content || ''
-                          if (!content) return
-                          try {
-                            await navigator.clipboard.writeText(content)
-                          } catch (e) {
-                            const textarea = document.createElement('textarea')
-                            textarea.value = content
-                            textarea.style.position = 'fixed'
-                            textarea.style.opacity = '0'
-                            document.body.appendChild(textarea)
-                            textarea.select()
-                            document.execCommand('copy')
-                            document.body.removeChild(textarea)
-                          }
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                          </svg>
-                        </button>
-                        <button className="action-btn" title="分享" onClick={async () => {
-                          const text = message.content || ''
-                          if (navigator.share && text) {
-                            try {
-                              await navigator.share({ text })
-                              return
-                            } catch (e) {
-                              if ((e as Error).name !== 'AbortError') {
-                                console.log('Share failed, trying clipboard')
-                              }
-                            }
-                          }
-                          try {
-                            await navigator.clipboard.writeText(text)
-                          } catch (e) {
-                            console.error('复制失败:', e)
-                          }
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="18" cy="5" r="3"></circle>
-                            <circle cx="6" cy="12" r="3"></circle>
-                            <circle cx="18" cy="19" r="3"></circle>
-                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                          </svg>
-                        </button>
-                      </div>
-                    )}
+                    ))}
                   </div>
-                </div>
-              )
-            })
+                )}
+              </div>
+            </div>
+          ))}
+          {isLoading && (
+            <div className="message-wrapper assistant">
+              <div className="message-content">
+                <div className="typing-indicator">正在思考...</div>
+              </div>
+            </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="input-area">
-          <div className="input-wrapper">
-            <textarea
-              ref={textareaRef}
-              className="chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              placeholder="输入消息..."
-              rows={1}
-            />
-            <button 
-              className="send-btn" 
-              onClick={sendMessage}
-              disabled={isLoading || !input.trim() || (settings.enableApiKey && !settings.apiKey.trim())}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-              发送
-            </button>
-            {isLoading && (
-              <button 
-                className="stop-btn" 
-                onClick={stopGenerating}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-                </svg>
-                停止
-              </button>
-            )}
-            
-          </div>
-        </div>
+        <MultiModalInput
+          onSendMessage={sendMessage}
+          isLoading={isLoading}
+        />
       </main>
-
-      <BookStackPanel
-        isOpen={bookStackPanelOpen}
-        onToggle={toggleBookStackPanel}
-        initialUrl={bookStackUrl}
-        onUrlChange={setBookStackUrl}
-      />
-
-      {showEditTitleModal && editingConversation && (
-        <div className="modal-overlay" onClick={() => setShowEditTitleModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>修改标题</h2>
-              <button className="close-btn" onClick={() => setShowEditTitleModal(false)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>对话标题</label>
-                <input
-                  type="text"
-                  value={editingConversation.title}
-                  onChange={(e) => setEditingConversation({ ...editingConversation, title: e.target.value })}
-                  placeholder="请输入新标题"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="form-actions">
-              <button className="btn-secondary" onClick={() => setShowEditTitleModal(false)}>
-                取消
-              </button>
-              <button className="btn-primary" onClick={saveTitle}>
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showSettings && (
         <div className="modal-overlay" onClick={() => setShowSettings(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>连接设置</h2>
-              <button className="close-btn" onClick={() => setShowSettings(false)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
+              <h2>设置</h2>
+              <button className="close-btn" onClick={() => setShowSettings(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <div className="form-group">
-                <div className="toggle-row">
-                  <label>启用 API Key</label>
-                  <button
-                    className={`toggle-btn ${settings.enableApiKey ? 'active' : ''}`}
-                    onClick={() => setSettings({ ...settings, enableApiKey: !settings.enableApiKey })}
-                  >
-                    <span className="toggle-slider"></span>
-                  </button>
-                </div>
-                <p className="hint">关闭时不发送 Authorization header</p>
+              <div className="setting-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={settings.enableApiKey}
+                    onChange={(e) => setSettings(prev => ({ ...prev, enableApiKey: e.target.checked }))}
+                  />
+                  启用 API Key
+                </label>
               </div>
               {settings.enableApiKey && (
-                <div className="form-group">
-                  <label>API Key</label>
+                <div className="setting-item">
                   <input
                     type="password"
+                    placeholder="输入您的 API Key"
                     value={settings.apiKey}
-                    onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-                    placeholder="请输入 API Key"
+                    onChange={(e) => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
                   />
                 </div>
               )}
               <div className="form-group">
                 <label>选择模型</label>
                 <select
-                  value={settings.selectedModel || modelName}
-                  onChange={(e) => {
-                    const newModel = e.target.value
-                    setSettings({ ...settings, selectedModel: newModel })
-                    setModelName(newModel)
-                  }}
+                  value={settings.selectedModel}
+                  onChange={(e) => setSettings(prev => ({ ...prev, selectedModel: e.target.value }))}
                 >
-                  <option value="">{modelName || '加载中...'}</option>
+                  <option value="">默认模型</option>
                   {modelsList.map(model => (
                     <option key={model} value={model}>{model}</option>
                   ))}
                 </select>
               </div>
-            </div>
-            <div className="form-actions">
-              <button className="btn-secondary" onClick={() => setShowSettings(false)}>
-                取消
-              </button>
-              <button className="btn-primary" onClick={handleSettingsSave}>
-                保存
-              </button>
+              <div className="form-group">
+                <label>
+                  上下文长度（Context Length）
+                  <span className="context-length-value">
+                    当前: {formatContextLength(settings.contextLength)} ({settings.contextLength.toLocaleString()} tokens)
+                  </span>
+                </label>
+                <div className="slider-container">
+                  <input
+                    type="range"
+                    min={1024}
+                    max={32768}
+                    step={1024}
+                    value={settings.contextLength}
+                    onChange={(e) => setSettings(prev => ({ ...prev, contextLength: parseInt(e.target.value) }))}
+                    className="context-slider"
+                  />
+                </div>
+                <div className="context-length-presets">
+                  {CONTEXT_LENGTH_OPTIONS.map(opt => (
+                    <button
+                      key={opt}
+                      className={`preset-btn ${settings.contextLength === opt ? 'active' : ''}`}
+                      onClick={() => setSettings(prev => ({ ...prev, contextLength: opt }))}
+                    >
+                      {formatContextLength(opt)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="btn-primary" onClick={handleSettingsSave}>保存设置</button>
+                <button className="btn-secondary" onClick={() => setShowSettings(false)}>取消</button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {showEditTitleModal && editingConversation && (
+        <div className="modal-overlay" onClick={() => setShowEditTitleModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>编辑对话标题</h2>
+              <button className="close-btn" onClick={() => setShowEditTitleModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <input
+                className="modal-input"
+                type="text"
+                value={editingConversation.title}
+                onChange={(e) => setEditingConversation(prev => prev ? { ...prev, title: e.target.value } : null)}
+                autoFocus
+              />
+              <div className="modal-actions">
+                <button className="btn-primary" onClick={saveTitle}>保存</button>
+                <button className="btn-secondary" onClick={() => setShowEditTitleModal(false)}>取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <BookStackPanel
+        isOpen={bookStackPanelOpen}
+        onToggle={() => setBookStackPanelOpen((prev: boolean) => !prev)}
+        initialUrl={bookStackUrl}
+      />
     </div>
   )
 }
