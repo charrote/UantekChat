@@ -36,6 +36,17 @@
   --block-spacing: 1em;
   --bubble-padding: 16px 20px;
   --bubble-gap: 20px;
+
+  /* ── Message content theme tokens ─────────────────────────────── */
+  --code-inline-bg: rgba(0, 0, 0, 0.35);
+  --code-inline-color: #a5b4fc;
+  --code-block-bg: #18181b;
+  --blockquote-bg: rgba(139, 92, 246, 0.08);
+  --table-header-bg: rgba(139, 92, 246, 0.12);
+  --table-row-alt-bg: rgba(255, 255, 255, 0.03);
+  --link-color: #a5b4fc;
+  --code-header-bg: rgba(255, 255, 255, 0.04);
+  --mark-bg: rgba(139, 92, 246, 0.25);
 }
 
 /* ── Light Theme Variables (applied via .light-theme on <html>) ───────── */
@@ -58,6 +69,17 @@ html.html-light:root {
   --accent-light: rgba(124, 58, 237, 0.1);
   --border: #e4e4e7;
   --border-light: #f4f4f5;
+
+  /* ── Message content theme tokens ─────────────────────────────── */
+  --code-inline-bg: rgba(0, 0, 0, 0.06);
+  --code-inline-color: #7c3aed;
+  --code-block-bg: #f4f4f5;
+  --blockquote-bg: rgba(124, 58, 237, 0.04);
+  --table-header-bg: var(--bg-tertiary);
+  --table-row-alt-bg: rgba(0, 0, 0, 0.02);
+  --link-color: #7c3aed;
+  --code-header-bg: rgba(0, 0, 0, 0.04);
+  --mark-bg: rgba(124, 58, 237, 0.2);
 }
 
 ::-webkit-scrollbar {
@@ -692,9 +714,9 @@ body {
 .message-content code {
   margin: 0;
   padding: 2px 6px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--code-inline-bg);
   border-radius: 4px;
-  color: #a5b4fc;
+  color: var(--code-inline-color);
   line-height: 1.6;
   font-family: var(--font-mono);
   font-size: 0.88em;
@@ -755,8 +777,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 7px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid var(--border-light);
+  background: var(--code-header-bg);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
   font-family: inherit;
@@ -798,7 +820,7 @@ body {
 }
 
 .message-content a {
-  color: #a5b4fc;
+  color: var(--link-color);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: all 0.2s ease;
@@ -811,7 +833,7 @@ body {
 
 .message-content strong {
   font-weight: 700;
-  color: #fafafa;
+  color: var(--text-primary);
 }
 
 .message-content em {
@@ -849,7 +871,7 @@ body {
 }
 
 .message-content tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--table-row-alt-bg);
 }
 
 .message-content tr:nth-child(odd) {
@@ -861,14 +883,14 @@ body {
   height: auto;
   border-radius: 8px;
   margin: var(--block-spacing) 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .message-content mark {
-  background: rgba(139, 92, 246, 0.25);
+  background: var(--mark-bg);
   color: inherit;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .typing-indicator {
@@ -876,10 +898,10 @@ body {
   align-items: center;
   gap: 6px;
   padding: var(--bubble-padding);
-  background: #27272a;
+  background: var(--bg-secondary);
   border-radius: 18px;
-  border: 1px solid #3f3f46;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   min-width: 70px;
 }
 
