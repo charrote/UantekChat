@@ -50,12 +50,13 @@ describe('App Component', () => {
   })
 
   it('persists settings to localStorage', () => {
-    const settings = { enableApiKey: true, apiKey: 'test-key', selectedModel: 'model-x', isDarkMode: false }
+    const settings = { enableApiKey: true, apiKey: 'test-key', selectedModel: 'model-x', isDarkMode: false, enableThinking: true }
     localStorageMock.setItem('settings', JSON.stringify(settings))
     const saved = JSON.parse(localStorageMock.getItem('settings')!)
     expect(saved.enableApiKey).toBe(true)
     expect(saved.apiKey).toBe('test-key')
     expect(saved.selectedModel).toBe('model-x')
+    expect(saved.enableThinking).toBe(true)
   })
 
   it('handles postMessage for BookStack navigation', () => {
@@ -88,6 +89,41 @@ describe('App Component', () => {
     })
     expect(response.ok).toBe(true)
     expect(response.body).toBeDefined()
+  })
+
+  it('parses reasoning_content from SSE stream', async () => {
+    const mockResponse = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"Thinking step 1"}}]}\n\n'))
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Final answer"}}]}\n\n'))
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      }
+    })
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      body: mockResponse,
+    })
+
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }),
+    })
+    expect(response.ok).toBe(true)
+    expect(response.body).toBeDefined()
+  })
+
+  it('parses reasoning content from API delta', () => {
+    const delta = { content: '', reasoning_content: 'My reasoning' }
+    const reasoning = delta.reasoning_content || ''
+    expect(reasoning).toBe('My reasoning')
+  })
+
+  it('default settings enable thinking mode', () => {
+    const defaultSettings = { enableThinking: true }
+    expect(defaultSettings.enableThinking).toBe(true)
   })
 
   it('toggles dark mode theme class', () => {

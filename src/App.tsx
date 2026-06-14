@@ -7,6 +7,7 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  reasoningContent?: string
   attachments?: {
     type: string
     previewUrl?: string
@@ -28,6 +29,7 @@ interface Settings {
   selectedModel: string
   isDarkMode: boolean
   contextLength: number
+  enableThinking: boolean
 }
 
 const defaultSettings: Settings = {
@@ -35,7 +37,8 @@ const defaultSettings: Settings = {
   apiKey: '',
   selectedModel: '',
   isDarkMode: true,
-  contextLength: 4096
+  contextLength: 4096,
+  enableThinking: true
 }
 
 const CONTEXT_LENGTH_OPTIONS = [1024, 4096, 8192, 16384, 32768]
@@ -253,6 +256,7 @@ function App() {
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       let fullContent = ''
+      let fullReasoning = ''
 
       if (!reader) {
         throw new Error('无法读取响应流')
@@ -272,7 +276,9 @@ function App() {
 
             try {
               const parsed = JSON.parse(data)
-              const content = parsed.choices?.[0]?.delta?.content || ''
+              const delta = parsed.choices?.[0]?.delta
+              const content = delta?.content || ''
+              const reasoning = delta?.reasoning_content || ''
               if (content) {
                 fullContent += content
                 setConversations(prev => prev.map(c =>
@@ -281,7 +287,22 @@ function App() {
                         ...c,
                         messages: c.messages.map(m =>
                           m.id === assistantMessageId
-                            ? { ...m, content: fullContent }
+                            ? { ...m, content: fullContent, reasoningContent: fullReasoning }
+                            : m
+                        )
+                      }
+                    : c
+                ))
+              }
+              if (reasoning) {
+                fullReasoning += reasoning
+                setConversations(prev => prev.map(c =>
+                  c.id === conversation!.id
+                    ? {
+                        ...c,
+                        messages: c.messages.map(m =>
+                          m.id === assistantMessageId
+                            ? { ...m, content: fullContent, reasoningContent: fullReasoning }
                             : m
                         )
                       }
@@ -520,6 +541,19 @@ function App() {
           {activeConversation?.messages.map(m => (
             <div key={m.id} className={`message-wrapper ${m.role}`}>
               <div className="message-content">
+                {m.role === 'assistant' && m.reasoningContent && settings.enableThinking && (
+                  <div className="thinking-block">
+                    <div className="thinking-header">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                      </svg>
+                      思考过程
+                    </div>
+                    <div className="thinking-text">
+                      <MarkdownRenderer content={m.reasoningContent} />
+                    </div>
+                  </div>
+                )}
                 <MarkdownRenderer content={m.content} />
                 {m.attachments && m.attachments.length > 0 && (
                   <div className="message-attachments">
@@ -566,6 +600,17 @@ function App() {
                   />
                   启用 API Key
                 </label>
+              </div>
+              <div className="setting-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={settings.enableThinking}
+                    onChange={(e) => setSettings(prev => ({ ...prev, enableThinking: e.target.checked }))}
+                  />
+                  显示思考过程
+                </label>
+                <div className="hint">开启后，AI 的推理思考过程将显示在回复内容上方</div>
               </div>
               {settings.enableApiKey && (
                 <div className="setting-item">
