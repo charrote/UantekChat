@@ -102,7 +102,7 @@ const MultiModalInput: React.FC<MultiModalInputProps> = ({ onSendMessage, isLoad
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -148,9 +148,13 @@ const MultiModalInput: React.FC<MultiModalInputProps> = ({ onSendMessage, isLoad
         />
         <button type="button" className="send-btn" onClick={handleSendMessage} disabled={isLoading}>
           {isLoading ? <span className="send-spinner" /> : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-            </svg>
+            <>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+              发送
+              <span className="send-shortcut">Ctrl+Enter</span>
+            </>
           )}
         </button>
         <input type="file" ref={fileInputRef} multiple hidden onChange={handleFileChange} accept="image/*" />

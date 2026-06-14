@@ -1151,6 +1151,12 @@ body {
   box-shadow: 0 2px 10px rgba(139, 92, 246, 0.3);
 }
 
+.send-shortcut {
+  font-size: 10px;
+  opacity: 0.7;
+  font-weight: 400;
+}
+
 .send-btn:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-1px);
@@ -1678,90 +1684,6 @@ body {
 
 .toggle-switch input:checked + .toggle-slider:before {
   transform: translateX(24px);
-}
-
-/* ── Thinking / Reasoning Block Styles ────────────────────────────────── */
-
-.thinking-block {
-  margin-bottom: 16px;
-  border-left: 3px solid var(--accent);
-  background: rgba(139, 92, 246, 0.06);
-  border-radius: 0 8px 8px 0;
-  padding: 10px 14px;
-}
-
-.message.assistant .message-content .thinking-block,
-.message-wrapper.assistant .message-content .thinking-block {
-  background: rgba(139, 92, 246, 0.06);
-  border-left-color: var(--accent);
-}
-
-.light-theme .thinking-block {
-  background: rgba(124, 58, 237, 0.04);
-}
-
-.thinking-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.thinking-header svg {
-  flex-shrink: 0;
-}
-
-.thinking-text {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  font-style: italic;
-  opacity: 0.85;
-}
-
-.thinking-text .markdown-content {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
-.thinking-text .markdown-content p {
-  margin: 0;
-  line-height: 1.6;
-}
-
-.thinking-text .markdown-content > p + p {
-  margin-top: 0.4em;
-}
-
-.thinking-text .markdown-content code {
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  color: #a5b4fc;
-}
-
-.thinking-text .markdown-content pre {
-  margin: 0.4em 0;
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.thinking-text .markdown-content pre code {
-  font-size: 12px;
-  padding: 8px 12px;
-}
-
-.thinking-text .markdown-content strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.thinking-text .markdown-content a {
-  color: var(--accent);
 }
 
 /* ── BookStack Panel Styles ──────────────────────────────────────────── */
