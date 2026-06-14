@@ -78,6 +78,7 @@ function App() {
   const [bookStackUrl, setBookStackUrl] = useState<string | undefined>(undefined)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>({})
 
   const activeConversation = conversations.find(c => c.id === activeConversationId)
 
@@ -106,6 +107,20 @@ function App() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [activeConversation?.messages, autoScroll])
+
+  useEffect(() => {
+    if (isLoading) {
+      const msgs = activeConversation?.messages || []
+      const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant')
+      if (lastAssistant?.reasoningContent) {
+        setThinkingExpanded(prev => ({ ...prev, [lastAssistant.id]: true }))
+        const el = document.getElementById(`thinking-content-${lastAssistant.id}`)
+        if (el) {
+          el.scrollTop = el.scrollHeight
+        }
+      }
+    }
+  }, [activeConversation?.messages, isLoading])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -171,6 +186,17 @@ function App() {
   const handleConversationClick = (id: string) => {
     setActiveConversationId(id)
     closeSidebar()
+  }
+
+  const isStreamingMessage = (msgId: string) => {
+    if (!isLoading) return false
+    const msgs = activeConversation?.messages || []
+    const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant')
+    return lastAssistant?.id === msgId
+  }
+
+  const toggleThinking = (msgId: string) => {
+    setThinkingExpanded(prev => ({ ...prev, [msgId]: !prev[msgId] }))
   }
 
   const sendMessage = async (content: string, attachments?: {
@@ -276,33 +302,19 @@ function App() {
 
             try {
               const parsed = JSON.parse(data)
-              const delta = parsed.choices?.[0]?.delta
-              const content = delta?.content || ''
-              const reasoning = delta?.reasoning_content || ''
-              if (content) {
+              const delta = parsed.choices?.[0]?.delta || {}
+              const content = delta.content || ''
+              const reasoningContent = delta.reasoning_content || ''
+              if (content || reasoningContent) {
                 fullContent += content
+                fullReasoning += reasoningContent
                 setConversations(prev => prev.map(c =>
                   c.id === conversation!.id
                     ? {
                         ...c,
                         messages: c.messages.map(m =>
                           m.id === assistantMessageId
-                            ? { ...m, content: fullContent, reasoningContent: fullReasoning }
-                            : m
-                        )
-                      }
-                    : c
-                ))
-              }
-              if (reasoning) {
-                fullReasoning += reasoning
-                setConversations(prev => prev.map(c =>
-                  c.id === conversation!.id
-                    ? {
-                        ...c,
-                        messages: c.messages.map(m =>
-                          m.id === assistantMessageId
-                            ? { ...m, content: fullContent, reasoningContent: fullReasoning }
+                            ? { ...m, content: fullContent, reasoningContent: fullReasoning || undefined }
                             : m
                         )
                       }
@@ -540,6 +552,41 @@ function App() {
         <div className="chat-container" onScroll={handleScroll}>
           {activeConversation?.messages.map(m => (
             <div key={m.id} className={`message-wrapper ${m.role}`}>
+              {m.role === 'assistant' && m.reasoningContent && settings.enableThinking && (
+                <div className={`thinking-block ${isStreamingMessage(m.id) ? 'streaming' : ''}`}>
+                  <div className="thinking-header" onClick={() => toggleThinking(m.id)}>
+                    <div className="thinking-header-left">
+                      {isStreamingMessage(m.id) ? (
+                        <span className="thinking-dot"></span>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10zm0 3a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0V6a1 1 0 0 1 1-1zm0 11a1 1 0 0 1-1-1v-2a1 1 0 0 1 2 0v2a1 1 0 0 1-1 1z" fill="currentColor"/>
+                        </svg>
+                      )}
+                      <span>{isStreamingMessage(m.id) ? '思考中...' : '思考过程'}</span>
+                    </div>
+                    <button
+                      className="thinking-toggle-btn"
+                      onClick={(e) => { e.stopPropagation(); toggleThinking(m.id) }}
+                    >
+                      {isStreamingMessage(m.id) || thinkingExpanded[m.id] ? (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  {(isStreamingMessage(m.id) || thinkingExpanded[m.id]) && (
+                    <div className="thinking-content" id={`thinking-content-${m.id}`}>
+                      <MarkdownRenderer content={m.reasoningContent} />
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="message-content">
                 {m.role === 'assistant' && m.reasoningContent && settings.enableThinking && (
                   <div className="thinking-block">
@@ -570,7 +617,11 @@ function App() {
           {isLoading && (
             <div className="message-wrapper assistant">
               <div className="message-content">
-                <div className="typing-indicator">正在思考...</div>
+                <div className="thinking-loading">
+                  <span className="thinking-loading-dot"></span>
+                  <span className="thinking-loading-dot"></span>
+                  <span className="thinking-loading-dot"></span>
+                </div>
               </div>
             </div>
           )}
@@ -634,6 +685,18 @@ function App() {
                   ))}
                 </select>
               </div>
+              <div className="setting-item toggle-row">
+                <label>显示思考过程</label>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={settings.enableThinking}
+                    onChange={(e) => setSettings(prev => ({ ...prev, enableThinking: e.target.checked }))}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+              <div className="hint" style={{ marginTop: -12, marginBottom: 16 }}>开启后，AI 的推理过程将显示在回复上方</div>
               <div className="form-group">
                 <label>
                   上下文长度（Context Length）
