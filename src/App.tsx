@@ -30,6 +30,9 @@ interface Settings {
   isDarkMode: boolean
   contextLength: number
   enableThinking: boolean
+  bookStackHost: string
+  bookStackPort: string
+  bookStackToken: string
 }
 
 const defaultSettings: Settings = {
@@ -38,7 +41,10 @@ const defaultSettings: Settings = {
   selectedModel: '',
   isDarkMode: true,
   contextLength: 4096,
-  enableThinking: true
+  enableThinking: true,
+  bookStackHost: 'localhost',
+  bookStackPort: '6875',
+  bookStackToken: ''
 }
 
 const CONTEXT_LENGTH_OPTIONS = [1024, 4096, 8192, 16384, 32768]
@@ -63,6 +69,7 @@ function App() {
     return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings
   })
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<'model' | 'knowledge'>('model')
   const [isLoading, setIsLoading] = useState(false)
   const [modelName, setModelName] = useState('')
   const [modelsList, setModelsList] = useState<string[]>([])
@@ -421,6 +428,11 @@ function App() {
       return
     }
     localStorage.setItem('lmstudio-settings', JSON.stringify(settings))
+    localStorage.setItem('bookstack-settings', JSON.stringify({
+      host: settings.bookStackHost,
+      port: settings.bookStackPort,
+      token: settings.bookStackToken
+    }))
     await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -451,6 +463,18 @@ function App() {
         setModelsList(models)
       })
       .catch(() => {})
+    const bkSettings = localStorage.getItem('bookstack-settings')
+    if (bkSettings) {
+      try {
+        const parsed = JSON.parse(bkSettings)
+        setSettings(prev => ({
+          ...prev,
+          bookStackHost: parsed.host || prev.bookStackHost,
+          bookStackPort: parsed.port || prev.bookStackPort,
+          bookStackToken: parsed.token || prev.bookStackToken
+        }))
+      } catch {}
+    }
   }, [])
 
   return (
@@ -543,13 +567,19 @@ function App() {
           )}
           <h1 className="chat-title">{appTitle}</h1>
 
+          <div className="header-model-badge">
+            <span>{modelsList.length > 0 ? '🔌 LM Studio' : '⚠️ 未连接'}</span>
+            {modelName && <span>{modelName}</span>}
+          </div>
+
           <button
             className="theme-toggle-btn"
             onClick={() => setSettings(prev => ({ ...prev, isDarkMode: !prev.isDarkMode }))}
             title={settings.isDarkMode ? '切换到白天模式' : '切换到黑夜模式'}
+            aria-label={settings.isDarkMode ? '切换到白天模式' : '切换到黑夜模式'}
           >
             {settings.isDarkMode ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="5"></circle>
                 <line x1="12" y1="1" x2="12" y2="3"></line>
                 <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -561,16 +591,11 @@ function App() {
                 <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
               </svg>
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
               </svg>
             )}
           </button>
-
-          <div className="header-model-badge">
-            <span>{modelsList.length > 0 ? '🔌 LM Studio' : '⚠️ 未连接'}</span>
-            {modelName && <span>{modelName}</span>}
-          </div>
         </header>
 
         <div className="chat-container" onScroll={handleScroll}>
@@ -647,97 +672,174 @@ function App() {
 
       {showSettings && (
         <div className="modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>设置</h2>
               <button className="close-btn" onClick={() => setShowSettings(false)}>✕</button>
             </div>
+            <div className="settings-tabs">
+              <button
+                className={`settings-tab ${settingsTab === 'model' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('model')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                模型设置
+              </button>
+              <button
+                className={`settings-tab ${settingsTab === 'knowledge' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('knowledge')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                </svg>
+                知识库设置
+              </button>
+            </div>
             <div className="modal-body">
-              <div className="setting-item">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={settings.enableApiKey}
-                    onChange={(e) => setSettings(prev => ({ ...prev, enableApiKey: e.target.checked }))}
-                  />
-                  启用 API Key
-                </label>
-              </div>
-              <div className="setting-item">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={settings.enableThinking}
-                    onChange={(e) => setSettings(prev => ({ ...prev, enableThinking: e.target.checked }))}
-                  />
-                  显示思考过程
-                </label>
-                <div className="hint">开启后，AI 的推理思考过程将显示在回复内容上方</div>
-              </div>
-              {settings.enableApiKey && (
-                <div className="setting-item">
-                  <input
-                    type="password"
-                    placeholder="输入您的 API Key"
-                    value={settings.apiKey}
-                    onChange={(e) => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                  />
-                </div>
-              )}
-              <div className="form-group">
-                <label>选择模型</label>
-                <select
-                  value={settings.selectedModel}
-                  onChange={(e) => setSettings(prev => ({ ...prev, selectedModel: e.target.value }))}
-                >
-                  <option value="">默认模型</option>
-                  {modelsList.map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="setting-item toggle-row">
-                <label>显示思考过程</label>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={settings.enableThinking}
-                    onChange={(e) => setSettings(prev => ({ ...prev, enableThinking: e.target.checked }))}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-              <div className="hint" style={{ marginTop: -12, marginBottom: 16 }}>开启后，AI 的推理过程将显示在回复上方</div>
-              <div className="form-group">
-                <label>
-                  上下文长度（Context Length）
-                  <span className="context-length-value">
-                    当前: {formatContextLength(settings.contextLength)} ({settings.contextLength.toLocaleString()} tokens)
-                  </span>
-                </label>
-                <div className="slider-container">
-                  <input
-                    type="range"
-                    min={1024}
-                    max={32768}
-                    step={1024}
-                    value={settings.contextLength}
-                    onChange={(e) => setSettings(prev => ({ ...prev, contextLength: parseInt(e.target.value) }))}
-                    className="context-slider"
-                  />
-                </div>
-                <div className="context-length-presets">
-                  {CONTEXT_LENGTH_OPTIONS.map(opt => (
-                    <button
-                      key={opt}
-                      className={`preset-btn ${settings.contextLength === opt ? 'active' : ''}`}
-                      onClick={() => setSettings(prev => ({ ...prev, contextLength: opt }))}
+              {settingsTab === 'model' && (
+                <>
+                  <div className="setting-item">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={settings.enableApiKey}
+                        onChange={(e) => setSettings(prev => ({ ...prev, enableApiKey: e.target.checked }))}
+                      />
+                      启用 API Key
+                    </label>
+                  </div>
+                  {settings.enableApiKey && (
+                    <div className="setting-item">
+                      <input
+                        type="password"
+                        placeholder="输入您的 API Key"
+                        value={settings.apiKey}
+                        onChange={(e) => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+                      />
+                    </div>
+                  )}
+                  <div className="form-group">
+                    <label>选择模型</label>
+                    <select
+                      value={settings.selectedModel}
+                      onChange={(e) => setSettings(prev => ({ ...prev, selectedModel: e.target.value }))}
                     >
-                      {formatContextLength(opt)}
+                      <option value="">默认模型</option>
+                      {modelsList.map(model => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="setting-item toggle-row">
+                    <label>显示思考过程</label>
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={settings.enableThinking}
+                        onChange={(e) => setSettings(prev => ({ ...prev, enableThinking: e.target.checked }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div className="hint" style={{ marginTop: -12, marginBottom: 16 }}>开启后，AI 的推理过程将显示在回复上方</div>
+                  <div className="form-group">
+                    <label>
+                      上下文长度（Context Length）
+                      <span className="context-length-value">
+                        当前: {formatContextLength(settings.contextLength)} ({settings.contextLength.toLocaleString()} tokens)
+                      </span>
+                    </label>
+                    <div className="slider-container">
+                      <input
+                        type="range"
+                        min={1024}
+                        max={32768}
+                        step={1024}
+                        value={settings.contextLength}
+                        onChange={(e) => setSettings(prev => ({ ...prev, contextLength: parseInt(e.target.value) }))}
+                        className="context-slider"
+                      />
+                    </div>
+                    <div className="context-length-presets">
+                      {CONTEXT_LENGTH_OPTIONS.map(opt => (
+                        <button
+                          key={opt}
+                          className={`preset-btn ${settings.contextLength === opt ? 'active' : ''}`}
+                          onClick={() => setSettings(prev => ({ ...prev, contextLength: opt }))}
+                        >
+                          {formatContextLength(opt)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+              {settingsTab === 'knowledge' && (
+                <>
+                  <div className="form-group">
+                    <label>服务地址</label>
+                    <input
+                      type="text"
+                      placeholder="例如: localhost"
+                      value={settings.bookStackHost}
+                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackHost: e.target.value }))}
+                    />
+                    <div className="hint">BookStack 服务的主机名或 IP 地址</div>
+                  </div>
+                  <div className="form-group">
+                    <label>服务端口</label>
+                    <input
+                      type="text"
+                      placeholder="例如: 6875"
+                      value={settings.bookStackPort}
+                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackPort: e.target.value }))}
+                    />
+                    <div className="hint">BookStack 服务的端口号</div>
+                  </div>
+                  <div className="form-group">
+                    <label>个人 Token</label>
+                    <input
+                      type="password"
+                      placeholder="token_id:token_secret"
+                      value={settings.bookStackToken}
+                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackToken: e.target.value }))}
+                    />
+                    <div className="hint">BookStack API Token，格式为 token_id:token_secret，在 BookStack 后台设置 → API 中生成</div>
+                  </div>
+                  <div className="form-group">
+                    <button
+                      className="btn-secondary"
+                      style={{ width: '100%' }}
+                      onClick={() => {
+                        const testUrl = `http://${settings.bookStackHost}:${settings.bookStackPort}/api/books`
+                        fetch(testUrl, {
+                          headers: settings.bookStackToken
+                            ? { 'Authorization': `Token ${settings.bookStackToken}` }
+                            : {}
+                        })
+                          .then(res => {
+                            if (res.ok) {
+                              alert('连接成功！已获取到知识库数据。')
+                            } else if (res.status === 401) {
+                              alert('认证失败，请检查 Token 是否正确。')
+                            } else {
+                              alert(`连接失败，HTTP 状态码: ${res.status}`)
+                            }
+                          })
+                          .catch(() => {
+                            alert('无法连接到 BookStack 服务，请检查地址和端口。')
+                          })
+                      }}
+                    >
+                      测试连接
                     </button>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                </>
+              )}
               <div className="modal-actions">
                 <button className="btn-primary" onClick={handleSettingsSave}>保存设置</button>
                 <button className="btn-secondary" onClick={() => setShowSettings(false)}>取消</button>
@@ -775,6 +877,8 @@ function App() {
         isOpen={bookStackPanelOpen}
         onToggle={() => setBookStackPanelOpen((prev: boolean) => !prev)}
         initialUrl={bookStackUrl}
+        baseUrl={`http://${settings.bookStackHost}:${settings.bookStackPort}`}
+        apiToken={settings.bookStackToken}
       />
     </div>
   )

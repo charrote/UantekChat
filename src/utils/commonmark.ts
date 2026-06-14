@@ -6,7 +6,21 @@ import gfm from 'remark-gfm'
 import { visit } from 'unist-util-visit'
 import type { Element, Root } from 'hast'
 
-const BOOKSTACK_BASE_URL = 'http://localhost:6875'
+/**
+ * Get the configured BookStack base URL from localStorage
+ */
+function getBookStackBaseUrl(): string {
+  try {
+    const saved = localStorage.getItem('bookstack-settings')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed.host) {
+        return `http://${parsed.host}:${parsed.port || '6875'}`
+      }
+    }
+  } catch {}
+  return 'http://localhost:6875'
+}
 
 /**
  * Check if a URL is a BookStack internal link
@@ -14,7 +28,17 @@ const BOOKSTACK_BASE_URL = 'http://localhost:6875'
 function isBookStackUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.hostname === 'localhost' && parsed.port === '6875'
+    // Check against configured BookStack URL
+    const bkUrl = getBookStackBaseUrl()
+    const bkParsed = new URL(bkUrl)
+    if (parsed.hostname === bkParsed.hostname && parsed.port === bkParsed.port) {
+      return true
+    }
+    // Also accept localhost:6875 as fallback
+    if (parsed.hostname === 'localhost' && parsed.port === '6875') {
+      return true
+    }
+    return false
   } catch {
     // Relative URLs starting with /books/, /shelves/, /pages/ etc.
     return url.startsWith('/books/') ||
@@ -30,8 +54,9 @@ function isBookStackUrl(url: string): boolean {
  */
 function toBookStackUrl(url: string): string {
   if (url.startsWith('http')) return url
-  if (url.startsWith('/')) return `${BOOKSTACK_BASE_URL}${url}`
-  return `${BOOKSTACK_BASE_URL}/${url}`
+  const base = getBookStackBaseUrl()
+  if (url.startsWith('/')) return `${base}${url}`
+  return `${base}/${url}`
 }
 
 function rehypeMermaid() {

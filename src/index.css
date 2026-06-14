@@ -1769,6 +1769,50 @@ body {
   transform: translateX(24px);
 }
 
+/* ── Settings Modal ──────────────────────────────────────────────────── */
+.settings-modal {
+  max-width: 560px !important;
+}
+
+.settings-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.settings-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.settings-tab:hover {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: transparent;
+}
+
+.settings-tab svg {
+  flex-shrink: 0;
+}
+
 /* ── BookStack Panel Styles ──────────────────────────────────────────── */
 
 .bookstack-toggle-btn {
@@ -1956,6 +2000,145 @@ body {
 
 .bookstack-search-btn:hover {
   background: var(--accent-hover);
+}
+
+.bookstack-iframe-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.bookstack-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.bookstack-tree-panel {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.bookstack-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bookstack-tree-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bookstack-tree-refresh:hover {
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.bookstack-tree-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.bookstack-tree-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.bookstack-tree-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--error);
+  font-size: 12px;
+}
+
+.bookstack-tree-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.bookstack-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bookstack-tree-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.bookstack-tree-item.selected {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.bookstack-tree-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookstack-tree-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.bookstack-tree-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.bookstack-tree-book > span:last-child {
+  font-weight: 600;
+}
+
+.bookstack-tree-page {
+  padding-left: 40px;
 }
 
 .bookstack-iframe-wrapper {
