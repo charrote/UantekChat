@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { MarkdownRenderer } from './components/MarkdownRenderer'
 import { SourceCard } from './components/SourceCard'
 import { BookStackPanel } from './components/BookStackPanel'
@@ -95,18 +95,51 @@ function App() {
   })
   const [bookStackUrl, setBookStackUrl] = useState<string | undefined>(undefined)
   const [bookStackConfig, setBookStackConfig] = useState<BookStackConfig>({ host: 'localhost', port: 6875 })
+  const [bookStackTitle, setBookStackTitle] = useState('Uantek 知识库')
   const [ragEnabled, setRagEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('rag-enabled')
     return saved ? JSON.parse(saved) : false
   })
-  const [kbStatus, setKbStatus] = useState<{ available: boolean; docCount: number; lastSync: string | null }>({
+  const [kbStatus, setKbStatus] = useState<{ available: boolean; docCount: number; lastSync: string | null; error?: string }>({
     available: false,
     docCount: 0,
     lastSync: null
   })
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  const fetchKbStatus = useCallback(async (): Promise<{ available: boolean; docCount: number; lastSync: string | null; error?: string } | null> => {
+    try {
+      const res = await fetch('/api/rag/status')
+      const data = await res.json()
+      const status = data && typeof data.available === 'boolean'
+        ? { available: data.available, docCount: data.docCount || 0, lastSync: data.lastSync || null, error: data.error }
+        : { available: false, docCount: 0, lastSync: null, error: '无效的响应' }
+      setKbStatus(status)
+      return status
+    } catch (e) {
+      const status = { available: false, docCount: 0, lastSync: null, error: `网络错误: ${e instanceof Error ? e.message : '无法连接'}` }
+      setKbStatus(status)
+      return status
+    }
+  }, [])
+
+  const handleToggleRag = useCallback(async () => {
+    if (ragEnabled) {
+      setRagEnabled(false)
+    } else {
+      const status = await fetchKbStatus()
+      if (status && !status.available) {
+        const reason = status.error || '服务未响应'
+        alert(`RAG 服务不可用：${reason}\n请确认知识库服务(端口 9686)是否已启动。`)
+      } else {
+        setRagEnabled(true)
+      }
+    }
+  }, [ragEnabled, fetchKbStatus])
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>({})
+  const [displayLimit, setDisplayLimit] = useState(20)
 
   const activeConversation = conversations.find(c => c.id === activeConversationId)
 
@@ -135,8 +168,18 @@ function App() {
   }, [settings.isDarkMode])
 
   useEffect(() => {
+    setDisplayLimit(20)
+    const id = setTimeout(() => {
+      const container = document.querySelector('.chat-container')
+      if (container) container.scrollTop = container.scrollHeight
+    }, 10)
+    return () => clearTimeout(id)
+  }, [activeConversationId])
+
+  useEffect(() => {
     if (autoScroll) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const container = document.querySelector('.chat-container')
+      if (container) container.scrollTop = container.scrollHeight
     }
   }, [activeConversation?.messages, autoScroll])
 
@@ -518,14 +561,11 @@ function App() {
       tokenId: settings.bookStackTokenId,
       tokenSecret: settings.bookStackTokenSecret
     }))
+    fetchKbStatus()
     setShowSettings(false)
   }
 
   useEffect(() => {
-    const saved = localStorage.getItem('lmstudio-settings')
-    if (saved) {
-      setSettings({ ...defaultSettings, ...JSON.parse(saved) })
-    }
     fetch('/api/config')
       .then(res => res.json())
       .then(data => {
@@ -533,6 +573,7 @@ function App() {
         setAppTitle(data.title || '友文智脑')
         if (data.bookStack) {
           setBookStackConfig({ host: data.bookStack.host, port: data.bookStack.port })
+          setBookStackTitle(data.bookStack.title || 'Uantek 知识库')
         }
       })
       .catch(() => {})
@@ -547,15 +588,16 @@ function App() {
         }))
       } catch {}
     }
-    fetch('/api/rag/status')
-      .then(res => res.json())
-      .then(data => {
-        if (data && typeof data.available === 'boolean') {
-          setKbStatus({ available: data.available, docCount: data.docCount || 0, lastSync: data.lastSync || null })
-        }
-      })
-      .catch(() => {})
+    fetchKbStatus()
   }, [])
+
+  const allMessages = activeConversation?.messages || []
+  const visibleMessages = allMessages.slice(-displayLimit)
+  const hasMoreMessages = allMessages.length > displayLimit
+
+  const loadMore = () => {
+    setDisplayLimit(prev => prev + 20)
+  }
 
   return (
     <div className="app-container">
@@ -684,7 +726,14 @@ function App() {
         </header>
 
         <div className="chat-container" onScroll={handleScroll}>
-          {activeConversation?.messages.map(m => (
+          {hasMoreMessages && (
+            <div className="load-more-bar">
+              <button className="load-more-btn" onClick={loadMore}>
+                加载更多...
+              </button>
+            </div>
+          )}
+          {visibleMessages.map(m => (
             <div key={m.id} className={`message-wrapper ${m.role}`}>
               {m.role === 'assistant' && m.reasoningContent && settings.enableThinking && (
                 <div className={`thinking-block ${isStreamingMessage(m.id) ? 'streaming' : ''}`}>
@@ -761,7 +810,7 @@ function App() {
           onSendMessage={sendMessage}
           isLoading={isLoading}
           ragEnabled={ragEnabled}
-          onToggleRag={() => setRagEnabled(prev => !prev)}
+          onToggleRag={handleToggleRag}
           kbStatus={kbStatus}
         />
       </main>
@@ -896,6 +945,7 @@ function App() {
                         const params = new URLSearchParams({ baseUrl, token: fullToken, path: '/api/books' })
                         const res = await fetch(`/api/bookstack/proxy?${params}`)
                         if (res.ok) {
+                          fetchKbStatus()
                           alert('连接成功！已获取到知识库数据。')
                         } else if (res.status === 401) {
                           alert('认证失败，请检查 Token 是否正确。')
@@ -954,6 +1004,7 @@ function App() {
         apiToken={settings.bookStackTokenId && settings.bookStackTokenSecret
           ? `${settings.bookStackTokenId}:${settings.bookStackTokenSecret}`
           : ''}
+        title={bookStackTitle}
       />
     </div>
   )

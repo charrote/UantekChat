@@ -136,24 +136,19 @@ const MultiModalInput: React.FC<MultiModalInputProps> = ({ onSendMessage, isLoad
       <div className="rag-controls">
         <button
           type="button"
-          className={`rag-toggle-btn ${ragEnabled ? 'active' : ''}`}
+          className={`rag-toggle-btn ${ragEnabled ? 'active' : ''} ${kbStatus && !kbStatus.available ? 'disconnected' : ''}`}
           onClick={onToggleRag}
-          title={ragEnabled ? '关闭知识库检索' : '开启知识库检索'}
+          title="切换RAG基于知识库增强检索"
         >
+          <span className={`rag-status-dot ${kbStatus?.available ? 'online' : 'offline'}`}></span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/>
             <path d="M21 21l-4.35-4.35"/>
             <path d="M11 8v6"/>
             <path d="M8 11h6"/>
           </svg>
-          知识库
+          增强检索
         </button>
-        {kbStatus && (
-          <span className={`kb-status ${kbStatus.available ? 'available' : 'unavailable'}`}>
-            <span className="kb-status-dot"></span>
-            {kbStatus.available ? `${kbStatus.docCount} 文档` : '未连接'}
-          </span>
-        )}
       </div>
       <div className={`input-wrapper ${isDragging ? 'dragging' : ''}`}>
         <button type="button" className="upload-btn" title="上传附件" onClick={() => fileInputRef.current?.click()}>

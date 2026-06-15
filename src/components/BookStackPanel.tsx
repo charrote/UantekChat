@@ -7,6 +7,7 @@ interface BookStackPanelProps {
   onUrlChange?: (url: string) => void
   baseUrl: string
   apiToken: string
+  title?: string
 }
 
 interface BookItem {
@@ -45,7 +46,7 @@ type TreeNode = {
   data: PageItem
 }
 
-export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToken }: BookStackPanelProps) {
+export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToken, title = 'Uantek 知识库' }: BookStackPanelProps) {
   const [width, setWidth] = useState(420)
   const [isResizing, setIsResizing] = useState(false)
 
@@ -68,9 +69,37 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
 
-  const proxyFetch = useCallback(async (path: string) => {
-    const params = new URLSearchParams({ baseUrl, token: apiToken, path })
-    const res = await fetch(`/api/bookstack/proxy?${params}`)
+  // Context tracking for add-directory action
+  const [contextPath, setContextPath] = useState<number[] | null>(null)
+
+  // Create directory modal
+  const [showCreateDir, setShowCreateDir] = useState(false)
+  const [createDirName, setCreateDirName] = useState('')
+  const [createDirLoading, setCreateDirLoading] = useState(false)
+  const [createDirError, setCreateDirError] = useState('')
+
+  // Upload document modal
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadPageName, setUploadPageName] = useState('')
+  const [uploadBookId, setUploadBookId] = useState<number | null>(null)
+  const [uploadChapterId, setUploadChapterId] = useState<number | null>(null)
+  const [uploadLoading, setUploadLoading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  const proxyRequest = useCallback(async (path: string, method: string = 'GET', body?: any) => {
+    const opts: RequestInit = { method }
+    if (method === 'GET') {
+      const params = new URLSearchParams({ baseUrl, token: apiToken, path })
+      const res = await fetch(`/api/bookstack/proxy?${params}`, opts)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.json()
+    }
+    const res = await fetch(`/api/bookstack/proxy`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl, token: apiToken, path, body }),
+    })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.json()
   }, [baseUrl, apiToken])
@@ -79,14 +108,14 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
     setPageLoading(true)
     setPageContent(null)
     try {
-      const data = await proxyFetch(`/api/pages/${page.id}`)
+      const data = await proxyRequest(`/api/pages/${page.id}`)
       setPageContent(data.html || '')
     } catch (err: any) {
       setPageContent(`<div class="bookstack-page-error">加载失败: ${err.message}</div>`)
     } finally {
       setPageLoading(false)
     }
-  }, [proxyFetch])
+  }, [proxyRequest])
 
   // Fetch tree structure via BookStack API (through backend proxy)
   const fetchTree = useCallback(async () => {
@@ -99,9 +128,9 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
     setTreeError('')
     try {
       const [booksData, allChaptersRes, allPagesRes] = await Promise.all([
-        proxyFetch('/api/books'),
-        proxyFetch('/api/chapters?count=500').catch(() => ({ data: [] })),
-        proxyFetch('/api/pages?count=500').catch(() => ({ data: [] })),
+        proxyRequest('/api/books'),
+        proxyRequest('/api/chapters?count=500').catch(() => ({ data: [] })),
+        proxyRequest('/api/pages?count=500').catch(() => ({ data: [] })),
       ])
 
       const books: BookItem[] = (booksData.data || []).map((b: any) => ({
@@ -135,7 +164,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
           type: 'book',
           data: book,
           children: [],
-          expanded: false,
+          expanded: true,
         }
 
         const chapters = chaptersByBook.get(book.id) || []
@@ -144,7 +173,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
             type: 'chapter',
             data: chapter,
             children: [],
-            expanded: false,
+            expanded: true,
           }
           const chPages = pagesByChapter.get(chapter.id) || []
           for (const pg of chPages) {
@@ -166,7 +195,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
     } finally {
       setTreeLoading(false)
     }
-  }, [proxyFetch])
+  }, [proxyRequest])
 
   useEffect(() => {
     if (isOpen && apiToken) {
@@ -175,6 +204,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
   }, [isOpen, apiToken, fetchTree])
 
   const toggleNode = (path: number[]) => {
+    setContextPath(path)
     setTreeData(prev => {
       const newTree = structuredClone(prev)
       let node: TreeNode | undefined
@@ -206,6 +236,133 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
       const searchUrl = `${baseUrl}/search?term=${encodeURIComponent(searchQuery.trim())}`
       window.open(searchUrl, '_blank')
     }
+  }
+
+  // Helper: get the context node from treeData and contextPath
+  const getContextNode = useCallback((): { node: TreeNode; parentBook?: TreeNode } | null => {
+    if (!contextPath || contextPath.length === 0) return null
+    let current: TreeNode[] = treeData
+    let node: TreeNode | undefined
+    let parent: TreeNode | undefined
+    for (let i = 0; i < contextPath.length; i++) {
+      node = current[contextPath[i]]
+      if (!node) return null
+      if (i < contextPath.length - 1) parent = node
+      if (node.type === 'page') break
+      current = node.children
+    }
+    if (!node) return null
+    return { node, parentBook: parent?.type === 'book' ? parent : undefined }
+  }, [contextPath, treeData])
+
+  const getContextDirType = useCallback((): { type: 'book' | 'chapter'; bookId?: number; chapterId?: number } => {
+    const ctx = getContextNode()
+    if (!ctx) return { type: 'book' }
+    if (ctx.node.type === 'book') {
+      return { type: 'chapter', bookId: ctx.node.data.id }
+    }
+    if (ctx.node.type === 'chapter') {
+      const bookId = ctx.node.data.book_id || ctx.parentBook?.data.id
+      return { type: 'chapter', bookId, chapterId: ctx.node.data.id }
+    }
+    if (ctx.node.type === 'page') {
+      const nodeData = ctx.node.data as PageItem
+      let bookId = nodeData.book_id
+      if (!bookId && ctx.parentBook) bookId = ctx.parentBook.data.id
+      return { type: 'chapter', bookId, chapterId: nodeData.chapter_id ?? undefined }
+    }
+    return { type: 'book' }
+  }, [getContextNode])
+
+  // Create directory
+  const handleCreateDir = async () => {
+    if (!createDirName.trim()) {
+      setCreateDirError('请输入名称')
+      return
+    }
+    setCreateDirLoading(true)
+    setCreateDirError('')
+    try {
+      const dirType = getContextDirType()
+      let result: any
+      if (dirType.type === 'book') {
+        result = await proxyRequest('/api/books', 'POST', { name: createDirName.trim() })
+      } else {
+        result = await proxyRequest('/api/chapters', 'POST', {
+          book_id: dirType.bookId,
+          name: createDirName.trim(),
+        })
+      }
+      if (result && result.id) {
+        setShowCreateDir(false)
+        setCreateDirName('')
+        fetchTree()
+      } else {
+        setCreateDirError('创建失败: 未知响应')
+      }
+    } catch (err: any) {
+      setCreateDirError(err.message || '创建失败')
+    } finally {
+      setCreateDirLoading(false)
+    }
+  }
+
+  // Upload document
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadFile(file)
+    const name = file.name.replace(/\.[^.]+$/, '')
+    setUploadPageName(name)
+    setShowUpload(true)
+  }
+
+  const handleUploadDoc = async () => {
+    if (!uploadFile || !uploadPageName.trim()) {
+      setUploadError('请选择文件并输入名称')
+      return
+    }
+    if (!uploadBookId) {
+      setUploadError('请选择所属书籍')
+      return
+    }
+    setUploadLoading(true)
+    setUploadError('')
+    try {
+      const text = await uploadFile.text()
+      const html = uploadFile.name.match(/\.md$/i)
+        ? `<div class="markdown-content"><pre>${escapeHtml(text)}</pre></div>`
+        : uploadFile.name.match(/\.html?$/i)
+          ? text
+          : `<pre>${escapeHtml(text)}</pre>`
+
+      const body: any = {
+        book_id: uploadBookId,
+        name: uploadPageName.trim(),
+        html,
+      }
+      if (uploadChapterId) body.chapter_id = uploadChapterId
+
+      const result = await proxyRequest('/api/pages', 'POST', body)
+      if (result && result.id) {
+        setShowUpload(false)
+        setUploadFile(null)
+        setUploadPageName('')
+        setUploadBookId(null)
+        setUploadChapterId(null)
+        fetchTree()
+      } else {
+        setUploadError('上传失败: 未知响应')
+      }
+    } catch (err: any) {
+      setUploadError(err.message || '上传失败')
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
+  function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   }
 
   // Resize handlers
@@ -262,6 +419,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
     }
 
     const isExpanded = node.expanded
+    const isContext = contextPath && contextPath.length === path.length && contextPath.every((v, i) => v === path[i])
     const icon = node.type === 'book' ? (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -276,7 +434,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
     return (
       <div key={`${node.type}-${node.data.id}`}>
         <div
-          className={`bookstack-tree-item bookstack-tree-${node.type}`}
+          className={`bookstack-tree-item bookstack-tree-${node.type}${isContext ? ' context' : ''}`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => toggleNode(path)}
         >
@@ -298,7 +456,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
       <button
         className="bookstack-toggle-btn"
         onClick={onToggle}
-        title="打开 Uantek 知识库"
+          title={`打开 ${title}`}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -329,7 +487,7 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
-          <span>Uantek 知识库</span>
+          <span>{title}</span>
         </div>
         <div className="bookstack-panel-actions">
           <button
@@ -363,17 +521,40 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
 
       <div className="bookstack-content">
         <div className="bookstack-tree-panel">
-          <div className="bookstack-tree-header">
-            <span>目录结构</span>
-            {treeData.length > 0 && (
-              <button className="bookstack-tree-refresh" onClick={fetchTree} title="刷新">
+          <div className="bookstack-action-bar">
+            <span className="bookstack-action-bar-label">目录结构</span>
+            <div className="bookstack-action-bar-buttons">
+              {treeData.length > 0 && (
+                <button className="bookstack-action-bar-btn" onClick={fetchTree} title="刷新">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                </button>
+              )}
+              <button className="bookstack-action-bar-btn" onClick={() => document.getElementById('bookstack-file-input')?.click()} title="上传知识文档">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="23 4 23 10 17 10" />
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </button>
-            )}
+              <button className="bookstack-action-bar-btn" onClick={() => { setCreateDirName(''); setCreateDirError(''); setShowCreateDir(true) }} title="新增目录">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                  <line x1="12" y1="11" x2="12" y2="17" />
+                  <line x1="9" y1="14" x2="15" y2="14" />
+                </svg>
+              </button>
+            </div>
           </div>
+          <input
+            id="bookstack-file-input"
+            type="file"
+            accept=".md,.txt,.html,.htm"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
           <div className="bookstack-tree-scroll">
             {!apiToken ? (
               <div className="bookstack-tree-error">
@@ -461,6 +642,107 @@ export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToke
           </div>
         )}
       </div>
+
+      {/* Create directory modal */}
+      {showCreateDir && (
+        <div className="bookstack-modal-overlay" onClick={() => setShowCreateDir(false)}>
+          <div className="bookstack-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="bookstack-modal-header">
+              <h3>新增{getContextDirType().type === 'book' ? '书籍' : '章节'}</h3>
+              <button className="bookstack-action-btn" onClick={() => setShowCreateDir(false)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="bookstack-modal-body">
+              <div className="bookstack-modal-info">
+                类型: {getContextDirType().type === 'book' ? '📚 书籍 (顶级)' : `📁 章节 (属于 ${treeData.find(b => b.data.id === getContextDirType().bookId)?.data.name || '所选书籍'})`}
+              </div>
+              <input
+                className="bookstack-modal-input"
+                type="text"
+                value={createDirName}
+                onChange={(e) => setCreateDirName(e.target.value)}
+                placeholder={getContextDirType().type === 'book' ? '输入书籍名称' : '输入章节名称'}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateDir()}
+              />
+              {createDirError && <div className="bookstack-modal-error">{createDirError}</div>}
+            </div>
+            <div className="bookstack-modal-actions">
+              <button className="btn-secondary" onClick={() => setShowCreateDir(false)}>取消</button>
+              <button className="btn-primary" onClick={handleCreateDir} disabled={createDirLoading}>
+                {createDirLoading ? '创建中...' : '创建'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload document modal */}
+      {showUpload && (
+        <div className="bookstack-modal-overlay" onClick={() => setShowUpload(false)}>
+          <div className="bookstack-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="bookstack-modal-header">
+              <h3>上传知识文档</h3>
+              <button className="bookstack-action-btn" onClick={() => setShowUpload(false)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="bookstack-modal-body">
+              <div className="bookstack-modal-info">
+                文件: {uploadFile?.name}
+              </div>
+              <input
+                className="bookstack-modal-input"
+                type="text"
+                value={uploadPageName}
+                onChange={(e) => setUploadPageName(e.target.value)}
+                placeholder="文档名称"
+                autoFocus
+              />
+              <select
+                className="bookstack-modal-select"
+                value={uploadBookId ?? ''}
+                onChange={(e) => { setUploadBookId(e.target.value ? Number(e.target.value) : null); setUploadChapterId(null) }}
+              >
+                <option value="">选择所属书籍</option>
+                {treeData.filter((n): n is TreeNode & { type: 'book' } => n.type === 'book').map(book => (
+                  <option key={book.data.id} value={book.data.id}>{book.data.name}</option>
+                ))}
+              </select>
+              {uploadBookId && (
+                <select
+                  className="bookstack-modal-select"
+                  value={uploadChapterId ?? ''}
+                  onChange={(e) => setUploadChapterId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">无章节 (直接归属于书籍)</option>
+                  {(() => {
+                    const book = treeData.find((n): n is TreeNode & { type: 'book' } => n.type === 'book' && n.data.id === uploadBookId)
+                    if (!book) return null
+                    return book.children
+                      .filter((c): c is TreeNode & { type: 'chapter' } => c.type === 'chapter')
+                      .map(ch => (
+                        <option key={ch.data.id} value={ch.data.id}>{ch.data.name}</option>
+                      ))
+                  })()}
+                </select>
+              )}
+              {uploadError && <div className="bookstack-modal-error">{uploadError}</div>}
+            </div>
+            <div className="bookstack-modal-actions">
+              <button className="btn-secondary" onClick={() => setShowUpload(false)}>取消</button>
+              <button className="btn-primary" onClick={handleUploadDoc} disabled={uploadLoading || !uploadBookId}>
+                {uploadLoading ? '上传中...' : '上传'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

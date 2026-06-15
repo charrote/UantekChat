@@ -98,9 +98,19 @@ app.all('/api/bookstack/proxy', async (req, res) => {
     const url = `${rewrittenUrl}/${String(apiPath).replace(/^\//, '')}`
     const headers = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Token ${token}`
-    const response = await fetch(url, { headers })
-    const data = await response.json()
-    res.status(response.status).json(data)
+    const fetchOptions = { method: req.method, headers }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      fetchOptions.body = JSON.stringify(req.body.body || {})
+    }
+    const response = await fetch(url, fetchOptions)
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const data = await response.json()
+      res.status(response.status).json(data)
+    } else {
+      const text = await response.text()
+      res.status(response.status).send(text)
+    }
   } catch (err) {
     res.status(502).json({ error: err.message })
   }

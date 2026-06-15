@@ -9,7 +9,8 @@
   "selectedModel": "UANTEKDEV1",
   "bookStack": {
     "host": "localhost",
-    "port": 6875
+    "port": 6875,
+    "title": "Uantek 知识库"
   },
   "rag": {
     "baseUrl": "http://localhost:9686",

@@ -373,6 +373,29 @@ body {
   gap: var(--bubble-gap);
 }
 
+.load-more-bar {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.load-more-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.load-more-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--accent-light);
+}
+
 .empty-state {
   flex: 1;
   display: flex;
@@ -410,13 +433,59 @@ body {
 }
 
 /* ── .message-wrapper variants (alias for .message) ─────────────────── */
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  max-width: 75%;
+  animation: fade-in-up 0.3s ease-out;
+}
+
 .message-wrapper.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
 }
 
 .message-wrapper.assistant {
   align-self: flex-start;
+}
+
+.message-wrapper.user .message-content {
+  background: var(--user-msg-bg);
+  color: white;
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+  border-radius: 22px 22px 6px 22px;
+  position: relative;
+}
+
+.message-wrapper.user .message-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: 20px 20px 0 0;
+}
+
+.message-wrapper.assistant .message-content {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.message-wrapper.assistant .message-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: 16px 16px 0 0;
 }
 
 .message-wrapper.grouped {
@@ -2023,7 +2092,7 @@ body {
   background: var(--bg-secondary);
 }
 
-.bookstack-tree-header {
+.bookstack-action-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2034,9 +2103,27 @@ body {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  overflow: hidden;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
-.bookstack-tree-refresh {
+.bookstack-action-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.bookstack-action-bar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.bookstack-action-bar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2048,12 +2135,102 @@ body {
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
-.bookstack-tree-refresh:hover {
+.bookstack-action-bar-btn:hover {
   color: var(--accent);
   border-color: var(--border);
+  background: var(--bg-tertiary);
 }
+
+/* ── BookStack action bar modals ─────────────────────────────────────── */
+
+.bookstack-modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.bookstack-modal {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.bookstack-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px 0;
+}
+
+.bookstack-modal-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.bookstack-modal-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bookstack-modal-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.bookstack-modal-input,
+.bookstack-modal-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.bookstack-modal-input:focus,
+.bookstack-modal-select:focus {
+  border-color: var(--accent);
+}
+
+.bookstack-modal-error {
+  font-size: 12px;
+  color: var(--error);
+  padding: 6px 10px;
+  background: var(--error-bg);
+  border-radius: 4px;
+}
+
+.bookstack-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 0 20px 16px;
+}
+
+/* ── BookStack Tree Scroll ──────────────────────────────────────────── */
 
 .bookstack-tree-scroll {
   flex: 1;
@@ -2110,6 +2287,11 @@ body {
 .bookstack-tree-item.selected {
   background: var(--accent-light);
   color: var(--accent);
+}
+
+.bookstack-tree-item.context {
+  background: var(--bg-tertiary);
+  outline: 1px dashed var(--border);
 }
 
 .bookstack-tree-item span {
@@ -2631,7 +2813,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 4px 6px;
+  padding: 0 4px 12px;
 }
 
 .rag-toggle-btn {
@@ -2659,26 +2841,22 @@ body {
   color: var(--accent);
 }
 
-.kb-status {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
+.rag-toggle-btn.disconnected {
+  opacity: 0.5;
 }
 
-.kb-status-dot {
+.rag-status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--error);
+  flex-shrink: 0;
 }
 
-.kb-status.available .kb-status-dot {
+.rag-status-dot.online {
   background: var(--success);
 }
 
-.kb-status.unavailable .kb-status-dot {
+.rag-status-dot.offline {
   background: var(--error);
 }
 
