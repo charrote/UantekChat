@@ -15,5 +15,9 @@
   "rag": {
     "baseUrl": "http://localhost:9686",
     "enabled": true
+  },
+  "webSearch": {
+    "tavilyApiKey": "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",
+    "enabled": true
   }
 }

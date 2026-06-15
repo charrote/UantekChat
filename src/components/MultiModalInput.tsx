@@ -19,10 +19,12 @@ interface MultiModalInputProps {
   isLoading: boolean;
   ragEnabled?: boolean;
   onToggleRag?: () => void;
+  webSearchEnabled?: boolean;
+  onToggleWebSearch?: () => void;
   kbStatus?: KbStatus;
 }
 
-const MultiModalInput: React.FC<MultiModalInputProps> = ({ onSendMessage, isLoading, ragEnabled = false, onToggleRag, kbStatus }) => {
+const MultiModalInput: React.FC<MultiModalInputProps> = ({ onSendMessage, isLoading, ragEnabled = false, onToggleRag, webSearchEnabled = false, onToggleWebSearch, kbStatus }) => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -148,6 +150,19 @@ const MultiModalInput: React.FC<MultiModalInputProps> = ({ onSendMessage, isLoad
             <path d="M8 11h6"/>
           </svg>
           增强检索
+        </button>
+        <button
+          type="button"
+          className={`web-search-toggle-btn ${webSearchEnabled ? 'active' : ''}`}
+          onClick={onToggleWebSearch}
+          title="切换联网搜索"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          联网搜索
         </button>
       </div>
       <div className={`input-wrapper ${isDragging ? 'dragging' : ''}`}>

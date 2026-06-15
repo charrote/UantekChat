@@ -8,6 +8,7 @@ interface SourceItem {
   title: string
   url: string
   score: number
+  type?: 'rag' | 'web'
 }
 
 interface Message {
@@ -46,7 +47,7 @@ const defaultSettings: Settings = {
   enableApiKey: false,
   apiKey: '',
   selectedModel: '',
-  isDarkMode: true,
+  isDarkMode: false,
   contextLength: 4096,
   enableThinking: true,
   bookStackTokenId: '',
@@ -100,6 +101,10 @@ function App() {
     const saved = localStorage.getItem('rag-enabled')
     return saved ? JSON.parse(saved) : false
   })
+  const [webSearchEnabled, setWebSearchEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('websearch-enabled')
+    return saved ? JSON.parse(saved) : false
+  })
   const [kbStatus, setKbStatus] = useState<{ available: boolean; docCount: number; lastSync: string | null; error?: string }>({
     available: false,
     docCount: 0,
@@ -137,6 +142,24 @@ function App() {
     }
   }, [ragEnabled, fetchKbStatus])
 
+  const handleToggleWebSearch = useCallback(async () => {
+    if (webSearchEnabled) {
+      setWebSearchEnabled(false)
+    } else {
+      try {
+        const res = await fetch('/api/web/status')
+        const data = await res.json()
+        if (!data.available) {
+          alert('联网搜索功能不可用：请在服务器配置文件(server/config.json)中设置 Tavily API Key。')
+        } else {
+          setWebSearchEnabled(true)
+        }
+      } catch {
+        alert('无法检测联网搜索服务状态，请确认服务器已启动。')
+      }
+    }
+  }, [webSearchEnabled])
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>({})
   const [displayLimit, setDisplayLimit] = useState(20)
@@ -162,6 +185,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('rag-enabled', JSON.stringify(ragEnabled))
   }, [ragEnabled])
+
+  useEffect(() => {
+    localStorage.setItem('websearch-enabled', JSON.stringify(webSearchEnabled))
+  }, [webSearchEnabled])
 
   useEffect(() => {
     document.documentElement.classList.toggle('light-theme', !settings.isDarkMode)
@@ -339,7 +366,72 @@ function App() {
 
       let fullContent = ''
 
-      if (ragEnabled) {
+      if (webSearchEnabled) {
+        const response = await fetch('/api/web/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: userMessage.content,
+            messages: messagesToSend,
+            searchWeb: true,
+            searchRag: ragEnabled,
+            top_k: 5
+          }),
+          signal: abortControllerRef.current.signal
+        })
+
+        if (!response.ok) {
+          throw new Error(`Web search error! status: ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let sources: SourceItem[] = []
+
+        if (!reader) {
+          throw new Error('无法读取响应流')
+        }
+
+        let buffer = ''
+        let eventType = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim()
+              continue
+            }
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              if (eventType === 'sources') {
+                try {
+                  sources = JSON.parse(data)
+                } catch { /* skip */ }
+              } else if (eventType === 'token') {
+                fullContent += data
+                setConversations(prev => prev.map(c =>
+                  c.id === conversation!.id
+                    ? {
+                        ...c,
+                        messages: c.messages.map(m =>
+                          m.id === assistantMessageId
+                            ? { ...m, content: fullContent, sources: sources.length > 0 ? sources : undefined }
+                            : m
+                        )
+                      }
+                    : c
+                ))
+              }
+            }
+          }
+        }
+      } else if (ragEnabled) {
         const response = await fetch('/api/rag/query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -733,7 +825,11 @@ function App() {
               </button>
             </div>
           )}
-          {visibleMessages.map(m => (
+          {visibleMessages.map(m => {
+            if (m.role === 'assistant' && !m.content && !m.sources?.length && !m.reasoningContent && !m.attachments?.length) {
+              return null
+            }
+            return (
             <div key={m.id} className={`message-wrapper ${m.role}`}>
               {m.role === 'assistant' && m.reasoningContent && settings.enableThinking && (
                 <div className={`thinking-block ${isStreamingMessage(m.id) ? 'streaming' : ''}`}>
@@ -791,7 +887,8 @@ function App() {
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
           {isLoading && (
             <div className="message-wrapper assistant">
               <div className="message-content">
@@ -811,6 +908,8 @@ function App() {
           isLoading={isLoading}
           ragEnabled={ragEnabled}
           onToggleRag={handleToggleRag}
+          webSearchEnabled={webSearchEnabled}
+          onToggleWebSearch={handleToggleWebSearch}
           kbStatus={kbStatus}
         />
       </main>
