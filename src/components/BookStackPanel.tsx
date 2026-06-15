@@ -45,32 +45,50 @@ type TreeNode = {
   data: PageItem
 }
 
-export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, baseUrl, apiToken }: BookStackPanelProps) {
+export function BookStackPanel({ isOpen, onToggle, onUrlChange, baseUrl, apiToken }: BookStackPanelProps) {
   const [width, setWidth] = useState(420)
   const [isResizing, setIsResizing] = useState(false)
-  const [iframeUrl, setIframeUrl] = useState('')
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [treeData, setTreeData] = useState<TreeNode[]>([])
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeError, setTreeError] = useState('')
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [contentOpen, setContentOpen] = useState(false)
+  const [contentTitle, setContentTitle] = useState('')
+  const [pageContent, setPageContent] = useState<string | null>(null)
+  const [pageLoading, setPageLoading] = useState(false)
+  const [maximized, setMaximized] = useState(false)
+  const closeContent = () => {
+    setContentOpen(false)
+    setPageContent(null)
+    setPageLoading(false)
+  }
   const panelRef = useRef<HTMLDivElement>(null)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
-  const defaultUrl = `${baseUrl}/shelves`
 
-  useEffect(() => {
-    if (!iframeUrl) {
-      setIframeUrl(defaultUrl)
-      setHistory([defaultUrl])
-      setHistoryIndex(0)
+  const proxyFetch = useCallback(async (path: string) => {
+    const params = new URLSearchParams({ baseUrl, token: apiToken, path })
+    const res = await fetch(`/api/bookstack/proxy?${params}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  }, [baseUrl, apiToken])
+
+  const fetchPageContent = useCallback(async (page: PageItem) => {
+    setPageLoading(true)
+    setPageContent(null)
+    try {
+      const data = await proxyFetch(`/api/pages/${page.id}`)
+      setPageContent(data.html || '')
+    } catch (err: any) {
+      setPageContent(`<div class="bookstack-page-error">加载失败: ${err.message}</div>`)
+    } finally {
+      setPageLoading(false)
     }
-  }, [baseUrl])
+  }, [proxyFetch])
 
-  // Fetch tree structure via BookStack API
+  // Fetch tree structure via BookStack API (through backend proxy)
   const fetchTree = useCallback(async () => {
     if (!apiToken) {
       setTreeError('请在设置中配置 BookStack API Token')
@@ -80,19 +98,36 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
     setTreeLoading(true)
     setTreeError('')
     try {
-      const headers: Record<string, string> = {
-        'Authorization': `Token ${apiToken}`,
-        'Content-Type': 'application/json',
-      }
-      const apiBase = baseUrl.replace(/\/+$/, '')
-      const booksRes = await fetch(`${apiBase}/api/books`, { headers })
-      if (!booksRes.ok) throw new Error(`HTTP ${booksRes.status}`)
-      const booksData = await booksRes.json()
+      const [booksData, allChaptersRes, allPagesRes] = await Promise.all([
+        proxyFetch('/api/books'),
+        proxyFetch('/api/chapters?count=500').catch(() => ({ data: [] })),
+        proxyFetch('/api/pages?count=500').catch(() => ({ data: [] })),
+      ])
+
       const books: BookItem[] = (booksData.data || []).map((b: any) => ({
-        id: b.id,
-        name: b.name,
-        slug: b.slug,
+        id: b.id, name: b.name, slug: b.slug,
       }))
+
+      const allChapters: ChapterItem[] = (allChaptersRes.data || []).map((ch: any) => ({
+        id: ch.id, name: ch.name, slug: ch.slug, book_id: ch.book_id,
+      }))
+
+      const allPages: PageItem[] = (allPagesRes.data || []).map((pg: any) => ({
+        id: pg.id, name: pg.name, slug: pg.slug, book_id: pg.book_id, chapter_id: pg.chapter_id || null,
+      }))
+
+      const chaptersByBook = new Map<number, ChapterItem[]>()
+      for (const ch of allChapters) {
+        if (!chaptersByBook.has(ch.book_id)) chaptersByBook.set(ch.book_id, [])
+        chaptersByBook.get(ch.book_id)!.push(ch)
+      }
+
+      const pagesByChapter = new Map<number | null, PageItem[]>()
+      for (const pg of allPages) {
+        const cid = pg.chapter_id
+        if (!pagesByChapter.has(cid)) pagesByChapter.set(cid, [])
+        pagesByChapter.get(cid)!.push(pg)
+      }
 
       const tree: TreeNode[] = []
       for (const book of books) {
@@ -103,42 +138,7 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
           expanded: false,
         }
 
-        const chaptersRes = await fetch(`${apiBase}/api/books/${book.id}/chapters`, { headers })
-        const chapters: ChapterItem[] = []
-        if (chaptersRes.ok) {
-          const chData = await chaptersRes.json()
-          for (const ch of (chData.data || [])) {
-            chapters.push({
-              id: ch.id,
-              name: ch.name,
-              slug: ch.slug,
-              book_id: book.id,
-            })
-          }
-        }
-
-        const pagesRes = await fetch(`${apiBase}/api/books/${book.id}/pages`, { headers })
-        const bookPages: PageItem[] = []
-        if (pagesRes.ok) {
-          const pgData = await pagesRes.json()
-          for (const pg of (pgData.data || [])) {
-            bookPages.push({
-              id: pg.id,
-              name: pg.name,
-              slug: pg.slug,
-              book_id: book.id,
-              chapter_id: pg.chapter_id || null,
-            })
-          }
-        }
-
-        const pagesByChapter = new Map<number | null, PageItem[]>()
-        for (const pg of bookPages) {
-          const cid = pg.chapter_id
-          if (!pagesByChapter.has(cid)) pagesByChapter.set(cid, [])
-          pagesByChapter.get(cid)!.push(pg)
-        }
-
+        const chapters = chaptersByBook.get(book.id) || []
         for (const chapter of chapters) {
           const chNode: TreeNode = {
             type: 'chapter',
@@ -153,7 +153,7 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
           bookNode.children.push(chNode)
         }
 
-        const unassignedPages = pagesByChapter.get(null) || []
+        const unassignedPages = (pagesByChapter.get(null) || []).filter(pg => pg.book_id === book.id)
         for (const pg of unassignedPages) {
           bookNode.children.push({ type: 'page', data: pg })
         }
@@ -166,7 +166,7 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
     } finally {
       setTreeLoading(false)
     }
-  }, [baseUrl, apiToken])
+  }, [proxyFetch])
 
   useEffect(() => {
     if (isOpen && apiToken) {
@@ -192,70 +192,20 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
   }
 
   const navigateToPage = (page: PageItem) => {
-    const url = `${baseUrl}/books/${page.book_id}/page/${page.slug || page.id}`
-    setIframeUrl(url)
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1)
-      newHistory.push(url)
-      return newHistory
-    })
-    setHistoryIndex(prev => prev + 1)
+    setContentTitle(page.name)
+    setContentOpen(true)
     setSelectedPageId(page.id)
-    onUrlChange?.(url)
+    setPageContent(null)
+    onUrlChange?.(`/books/${page.book_id}/page/${page.slug || page.id}`)
+    fetchPageContent(page)
   }
-
-  // Update iframe URL when initialUrl prop changes (from chat source links)
-  useEffect(() => {
-    if (initialUrl && initialUrl !== iframeUrl) {
-      setIframeUrl(initialUrl)
-      setHistory(prev => {
-        const newHistory = prev.slice(0, historyIndex + 1)
-        newHistory.push(initialUrl)
-        return newHistory
-      })
-      setHistoryIndex(prev => prev + 1)
-    }
-  }, [initialUrl])
-
-  const navigateTo = useCallback((url: string) => {
-    setIframeUrl(url)
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1)
-      newHistory.push(url)
-      return newHistory
-    })
-    setHistoryIndex(prev => prev + 1)
-    onUrlChange?.(url)
-  }, [historyIndex, onUrlChange])
-
-  const goBack = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1
-      setHistoryIndex(newIndex)
-      setIframeUrl(history[newIndex])
-      onUrlChange?.(history[newIndex])
-    }
-  }, [history, historyIndex, onUrlChange])
-
-  const goForward = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1
-      setHistoryIndex(newIndex)
-      setIframeUrl(history[newIndex])
-      onUrlChange?.(history[newIndex])
-    }
-  }, [history, historyIndex, onUrlChange])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
       const searchUrl = `${baseUrl}/search?term=${encodeURIComponent(searchQuery.trim())}`
-      navigateTo(searchUrl)
+      window.open(searchUrl, '_blank')
     }
-  }
-
-  const handleHome = () => {
-    navigateTo(defaultUrl)
   }
 
   // Resize handlers
@@ -348,7 +298,7 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
       <button
         className="bookstack-toggle-btn"
         onClick={onToggle}
-        title="打开 BookStack 知识库"
+        title="打开 Uantek 知识库"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -379,39 +329,9 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
-          <span>BookStack 知识库</span>
+          <span>Uantek 知识库</span>
         </div>
         <div className="bookstack-panel-actions">
-          <button
-            className="bookstack-action-btn"
-            onClick={handleHome}
-            title="首页"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </button>
-          <button
-            className="bookstack-action-btn"
-            onClick={goBack}
-            disabled={historyIndex <= 0}
-            title="后退"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <button
-            className="bookstack-action-btn"
-            onClick={goForward}
-            disabled={historyIndex >= history.length - 1}
-            title="前进"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
           <button
             className="bookstack-action-btn"
             onClick={onToggle}
@@ -442,57 +362,104 @@ export function BookStackPanel({ isOpen, onToggle, initialUrl, onUrlChange, base
       </form>
 
       <div className="bookstack-content">
-        {apiToken && (
-          <div className="bookstack-tree-panel">
-            <div className="bookstack-tree-header">
-              <span>目录结构</span>
-              {treeData.length > 0 && (
-                <button className="bookstack-tree-refresh" onClick={fetchTree} title="刷新">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="23 4 23 10 17 10" />
-                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        <div className="bookstack-tree-panel">
+          <div className="bookstack-tree-header">
+            <span>目录结构</span>
+            {treeData.length > 0 && (
+              <button className="bookstack-tree-refresh" onClick={fetchTree} title="刷新">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className="bookstack-tree-scroll">
+            {!apiToken ? (
+              <div className="bookstack-tree-error">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>请在设置中配置 BookStack API Token</span>
+              </div>
+            ) : treeLoading ? (
+              <div className="bookstack-tree-loading">
+                <div className="thinking-loading">
+                  <span className="thinking-loading-dot"></span>
+                  <span className="thinking-loading-dot"></span>
+                  <span className="thinking-loading-dot"></span>
+                </div>
+                <span>加载知识库结构...</span>
+              </div>
+            ) : treeError ? (
+              <div className="bookstack-tree-error">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>{treeError}</span>
+              </div>
+            ) : treeData.length === 0 ? (
+              <div className="bookstack-tree-empty">未找到书籍数据</div>
+            ) : (
+              treeData.map((node, idx) => renderTreeNode(node, [idx]))
+            )}
+          </div>
+        </div>
+        {contentOpen && (
+          <div className={`bookstack-content-overlay${maximized ? ' maximized' : ''}`}>
+            <div className="bookstack-overlay-header">
+              <span className="bookstack-overlay-title">{contentTitle}</span>
+              <div className="bookstack-overlay-actions">
+                <button className="bookstack-action-btn" onClick={() => setMaximized(v => !v)} title={maximized ? '还原' : '全屏阅读'}>
+                  {maximized ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="4 14 10 14 10 20" />
+                      <polyline points="20 10 14 10 14 4" />
+                      <line x1="14" y1="10" x2="21" y2="3" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="15 3 21 3 21 9" />
+                      <polyline points="9 21 3 21 3 15" />
+                      <line x1="21" y1="3" x2="14" y2="10" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </svg>
+                  )}
+                </button>
+                <button className="bookstack-overlay-close" onClick={closeContent} title="关闭内容">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
-              )}
+              </div>
             </div>
-            <div className="bookstack-tree-scroll">
-              {treeLoading ? (
+            <div className="bookstack-page-content">
+              {pageLoading ? (
                 <div className="bookstack-tree-loading">
                   <div className="thinking-loading">
                     <span className="thinking-loading-dot"></span>
                     <span className="thinking-loading-dot"></span>
                     <span className="thinking-loading-dot"></span>
                   </div>
-                  <span>加载知识库结构...</span>
+                  <span>加载文档内容...</span>
                 </div>
-              ) : treeError ? (
-                <div className="bookstack-tree-error">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  <span>{treeError}</span>
-                </div>
-              ) : treeData.length === 0 ? (
-                <div className="bookstack-tree-empty">未找到书籍数据</div>
+              ) : pageContent ? (
+                <div
+                  className="bookstack-page-html"
+                  dangerouslySetInnerHTML={{ __html: pageContent }}
+                />
               ) : (
-                treeData.map((node, idx) => renderTreeNode(node, [idx]))
+                <div className="bookstack-tree-empty">请选择一个文档</div>
               )}
             </div>
           </div>
         )}
-        <div className="bookstack-iframe-wrapper">
-          {iframeUrl && (
-            <iframe
-              ref={iframeRef}
-              src={iframeUrl}
-              className="bookstack-iframe"
-              title="BookStack"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-            />
-          )}
-        </div>
       </div>
     </div>
   )

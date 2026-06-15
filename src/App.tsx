@@ -1,13 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
 import { MarkdownRenderer } from './components/MarkdownRenderer'
+import { SourceCard } from './components/SourceCard'
 import { BookStackPanel } from './components/BookStackPanel'
 import MultiModalInput from './components/MultiModalInput'
+
+interface SourceItem {
+  title: string
+  url: string
+  score: number
+}
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   reasoningContent?: string
+  sources?: SourceItem[]
   attachments?: {
     type: string
     previewUrl?: string
@@ -30,9 +38,8 @@ interface Settings {
   isDarkMode: boolean
   contextLength: number
   enableThinking: boolean
-  bookStackHost: string
-  bookStackPort: string
-  bookStackToken: string
+  bookStackTokenId: string
+  bookStackTokenSecret: string
 }
 
 const defaultSettings: Settings = {
@@ -42,9 +49,13 @@ const defaultSettings: Settings = {
   isDarkMode: true,
   contextLength: 4096,
   enableThinking: true,
-  bookStackHost: 'localhost',
-  bookStackPort: '6875',
-  bookStackToken: ''
+  bookStackTokenId: '',
+  bookStackTokenSecret: ''
+}
+
+interface BookStackConfig {
+  host: string
+  port: number
 }
 
 const CONTEXT_LENGTH_OPTIONS = [1024, 4096, 8192, 16384, 32768]
@@ -72,7 +83,7 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<'model' | 'knowledge'>('model')
   const [isLoading, setIsLoading] = useState(false)
   const [modelName, setModelName] = useState('')
-  const [modelsList, setModelsList] = useState<string[]>([])
+
   const [appTitle, setAppTitle] = useState('友文智脑')
   const [autoScroll, setAutoScroll] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -83,6 +94,16 @@ function App() {
     return saved ? JSON.parse(saved) : false
   })
   const [bookStackUrl, setBookStackUrl] = useState<string | undefined>(undefined)
+  const [bookStackConfig, setBookStackConfig] = useState<BookStackConfig>({ host: 'localhost', port: 6875 })
+  const [ragEnabled, setRagEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('rag-enabled')
+    return saved ? JSON.parse(saved) : false
+  })
+  const [kbStatus, setKbStatus] = useState<{ available: boolean; docCount: number; lastSync: string | null }>({
+    available: false,
+    docCount: 0,
+    lastSync: null
+  })
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>({})
@@ -106,6 +127,10 @@ function App() {
   }, [bookStackPanelOpen])
 
   useEffect(() => {
+    localStorage.setItem('rag-enabled', JSON.stringify(ragEnabled))
+  }, [ragEnabled])
+
+  useEffect(() => {
     document.documentElement.classList.toggle('light-theme', !settings.isDarkMode)
   }, [settings.isDarkMode])
 
@@ -120,7 +145,6 @@ function App() {
       const msgs = activeConversation?.messages || []
       const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant')
       if (lastAssistant?.reasoningContent) {
-        setThinkingExpanded(prev => ({ ...prev, [lastAssistant.id]: true }))
         const el = document.getElementById(`thinking-content-${lastAssistant.id}`)
         if (el) {
           el.scrollTop = el.scrollHeight
@@ -270,66 +294,128 @@ function App() {
     try {
       abortControllerRef.current = new AbortController()
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          apiKey: settings.enableApiKey ? settings.apiKey : '',
-          messages: messagesToSend
-        }),
-        signal: abortControllerRef.current.signal
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
       let fullContent = ''
-      let fullReasoning = ''
 
-      if (!reader) {
-        throw new Error('无法读取响应流')
-      }
+      if (ragEnabled) {
+        const response = await fetch('/api/rag/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: userMessage.content, top_k: 5, stream: true }),
+          signal: abortControllerRef.current.signal
+        })
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        if (!response.ok) {
+          throw new Error(`RAG service error! status: ${response.status}`)
+        }
 
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let sources: SourceItem[] = []
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
+        if (!reader) {
+          throw new Error('无法读取响应流')
+        }
 
-            try {
-              const parsed = JSON.parse(data)
-              const delta = parsed.choices?.[0]?.delta || {}
-              const content = delta.content || ''
-              const reasoningContent = delta.reasoning_content || ''
-              if (content || reasoningContent) {
-                fullContent += content
-                fullReasoning += reasoningContent
+        let buffer = ''
+        let eventType = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim()
+              continue
+            }
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              if (eventType === 'sources') {
+                try {
+                  sources = JSON.parse(data)
+                } catch { /* skip */ }
+              } else if (eventType === 'token') {
+                fullContent += data
                 setConversations(prev => prev.map(c =>
                   c.id === conversation!.id
                     ? {
                         ...c,
                         messages: c.messages.map(m =>
                           m.id === assistantMessageId
-                            ? { ...m, content: fullContent, reasoningContent: fullReasoning || undefined }
+                            ? { ...m, content: fullContent, sources: sources.length > 0 ? sources : undefined }
                             : m
                         )
                       }
                     : c
                 ))
               }
-            } catch (e) {
-              // skip
+            }
+          }
+        }
+      } else {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            apiKey: settings.enableApiKey ? settings.apiKey : '',
+            messages: messagesToSend
+          }),
+          signal: abortControllerRef.current.signal
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let fullReasoning = ''
+
+        if (!reader) {
+          throw new Error('无法读取响应流')
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split('\n')
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              if (data === '[DONE]') continue
+
+              try {
+                const parsed = JSON.parse(data)
+                const delta = parsed.choices?.[0]?.delta || {}
+                const content = delta.content || ''
+                const reasoningContent = delta.reasoning_content || ''
+                if (content || reasoningContent) {
+                  fullContent += content
+                  fullReasoning += reasoningContent
+                  setConversations(prev => prev.map(c =>
+                    c.id === conversation!.id
+                      ? {
+                          ...c,
+                          messages: c.messages.map(m =>
+                            m.id === assistantMessageId
+                              ? { ...m, content: fullContent, reasoningContent: fullReasoning || undefined }
+                              : m
+                          )
+                        }
+                      : c
+                  ))
+                }
+              } catch (e) {
+                // skip
+              }
             }
           }
         }
@@ -429,15 +515,9 @@ function App() {
     }
     localStorage.setItem('lmstudio-settings', JSON.stringify(settings))
     localStorage.setItem('bookstack-settings', JSON.stringify({
-      host: settings.bookStackHost,
-      port: settings.bookStackPort,
-      token: settings.bookStackToken
+      tokenId: settings.bookStackTokenId,
+      tokenSecret: settings.bookStackTokenSecret
     }))
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ selectedModel: settings.selectedModel || modelName })
-    }).catch(() => {})
     setShowSettings(false)
   }
 
@@ -449,18 +529,11 @@ function App() {
     fetch('/api/config')
       .then(res => res.json())
       .then(data => {
-        setModelName(data.selectedModel || data.model)
-        if (data.selectedModel) {
-          setSettings(prev => ({ ...prev, selectedModel: data.selectedModel }))
-        }
+        setModelName(data.model)
         setAppTitle(data.title || '友文智脑')
-      })
-      .catch(() => {})
-    fetch('/api/models')
-      .then(res => res.json())
-      .then(data => {
-        const models = data.data?.map((m: { id: string }) => m.id) || []
-        setModelsList(models)
+        if (data.bookStack) {
+          setBookStackConfig({ host: data.bookStack.host, port: data.bookStack.port })
+        }
       })
       .catch(() => {})
     const bkSettings = localStorage.getItem('bookstack-settings')
@@ -469,12 +542,19 @@ function App() {
         const parsed = JSON.parse(bkSettings)
         setSettings(prev => ({
           ...prev,
-          bookStackHost: parsed.host || prev.bookStackHost,
-          bookStackPort: parsed.port || prev.bookStackPort,
-          bookStackToken: parsed.token || prev.bookStackToken
+          bookStackTokenId: parsed.tokenId || (parsed.token ? parsed.token.split(':')[0] : '') || prev.bookStackTokenId,
+          bookStackTokenSecret: parsed.tokenSecret || (parsed.token ? parsed.token.split(':').slice(1).join(':') : '') || prev.bookStackTokenSecret
         }))
       } catch {}
     }
+    fetch('/api/rag/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.available === 'boolean') {
+          setKbStatus({ available: data.available, docCount: data.docCount || 0, lastSync: data.lastSync || null })
+        }
+      })
+      .catch(() => {})
   }, [])
 
   return (
@@ -567,10 +647,15 @@ function App() {
           )}
           <h1 className="chat-title">{appTitle}</h1>
 
-          <div className="header-model-badge">
-            <span>{modelsList.length > 0 ? '🔌 LM Studio' : '⚠️ 未连接'}</span>
-            {modelName && <span>{modelName}</span>}
-          </div>
+          {modelName && (
+            <div className="header-model-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14" />
+                <path d="M12 5l-7 7 7 7" />
+              </svg>
+              <span>{modelName}</span>
+            </div>
+          )}
 
           <button
             className="theme-toggle-btn"
@@ -647,6 +732,14 @@ function App() {
                     ))}
                   </div>
                 )}
+                {m.sources && m.sources.length > 0 && (
+                  <div className="source-cards">
+                    <div className="source-cards-header">来源</div>
+                    {m.sources.map((s, i) => (
+                      <SourceCard key={i} source={s} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -667,6 +760,9 @@ function App() {
         <MultiModalInput
           onSendMessage={sendMessage}
           isLoading={isLoading}
+          ragEnabled={ragEnabled}
+          onToggleRag={() => setRagEnabled(prev => !prev)}
+          kbStatus={kbStatus}
         />
       </main>
 
@@ -722,18 +818,6 @@ function App() {
                       />
                     </div>
                   )}
-                  <div className="form-group">
-                    <label>选择模型</label>
-                    <select
-                      value={settings.selectedModel}
-                      onChange={(e) => setSettings(prev => ({ ...prev, selectedModel: e.target.value }))}
-                    >
-                      <option value="">默认模型</option>
-                      {modelsList.map(model => (
-                        <option key={model} value={model}>{model}</option>
-                      ))}
-                    </select>
-                  </div>
                   <div className="setting-item toggle-row">
                     <label>显示思考过程</label>
                     <label className="toggle-switch">
@@ -781,62 +865,51 @@ function App() {
               {settingsTab === 'knowledge' && (
                 <>
                   <div className="form-group">
-                    <label>服务地址</label>
+                    <label>Token ID</label>
                     <input
                       type="text"
-                      placeholder="例如: localhost"
-                      value={settings.bookStackHost}
-                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackHost: e.target.value }))}
+                      placeholder="输入 token_id"
+                      value={settings.bookStackTokenId}
+                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackTokenId: e.target.value }))}
                     />
-                    <div className="hint">BookStack 服务的主机名或 IP 地址</div>
                   </div>
                   <div className="form-group">
-                    <label>服务端口</label>
-                    <input
-                      type="text"
-                      placeholder="例如: 6875"
-                      value={settings.bookStackPort}
-                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackPort: e.target.value }))}
-                    />
-                    <div className="hint">BookStack 服务的端口号</div>
-                  </div>
-                  <div className="form-group">
-                    <label>个人 Token</label>
+                    <label>Token Secret</label>
                     <input
                       type="password"
-                      placeholder="token_id:token_secret"
-                      value={settings.bookStackToken}
-                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackToken: e.target.value }))}
+                      placeholder="输入 token_secret"
+                      value={settings.bookStackTokenSecret}
+                      onChange={(e) => setSettings(prev => ({ ...prev, bookStackTokenSecret: e.target.value }))}
                     />
-                    <div className="hint">BookStack API Token，格式为 token_id:token_secret，在 BookStack 后台设置 → API 中生成</div>
+                    <div className="hint">在 BookStack 后台 设置 → API 中生成，系统自动拼接为 token_id:token_secret</div>
                   </div>
                   <div className="form-group">
-                    <button
-                      className="btn-secondary"
-                      style={{ width: '100%' }}
-                      onClick={() => {
-                        const testUrl = `http://${settings.bookStackHost}:${settings.bookStackPort}/api/books`
-                        fetch(testUrl, {
-                          headers: settings.bookStackToken
-                            ? { 'Authorization': `Token ${settings.bookStackToken}` }
-                            : {}
-                        })
-                          .then(res => {
-                            if (res.ok) {
-                              alert('连接成功！已获取到知识库数据。')
-                            } else if (res.status === 401) {
-                              alert('认证失败，请检查 Token 是否正确。')
-                            } else {
-                              alert(`连接失败，HTTP 状态码: ${res.status}`)
-                            }
-                          })
-                          .catch(() => {
-                            alert('无法连接到 BookStack 服务，请检查地址和端口。')
-                          })
-                      }}
-                    >
-                      测试连接
-                    </button>
+                  <button
+                    className="btn-secondary"
+                    style={{ width: '100%' }}
+                    onClick={async () => {
+                      try {
+                        const baseUrl = `http://${bookStackConfig.host}:${bookStackConfig.port}`
+                        const fullToken = settings.bookStackTokenId && settings.bookStackTokenSecret
+                          ? `${settings.bookStackTokenId}:${settings.bookStackTokenSecret}`
+                          : ''
+                        const params = new URLSearchParams({ baseUrl, token: fullToken, path: '/api/books' })
+                        const res = await fetch(`/api/bookstack/proxy?${params}`)
+                        if (res.ok) {
+                          alert('连接成功！已获取到知识库数据。')
+                        } else if (res.status === 401) {
+                          alert('认证失败，请检查 Token 是否正确。')
+                        } else {
+                          const data = await res.json().catch(() => ({}))
+                          alert(`连接失败，HTTP 状态码: ${res.status}${data.error ? ` - ${data.error}` : ''}`)
+                        }
+                      } catch {
+                        alert('无法连接到 BookStack 服务，请检查地址和端口。')
+                      }
+                    }}
+                  >
+                    测试连接
+                  </button>
                   </div>
                 </>
               )}
@@ -877,8 +950,10 @@ function App() {
         isOpen={bookStackPanelOpen}
         onToggle={() => setBookStackPanelOpen((prev: boolean) => !prev)}
         initialUrl={bookStackUrl}
-        baseUrl={`http://${settings.bookStackHost}:${settings.bookStackPort}`}
-        apiToken={settings.bookStackToken}
+        baseUrl={`http://${bookStackConfig.host}:${bookStackConfig.port}`}
+        apiToken={settings.bookStackTokenId && settings.bookStackTokenSecret
+          ? `${settings.bookStackTokenId}:${settings.bookStackTokenSecret}`
+          : ''}
       />
     </div>
   )

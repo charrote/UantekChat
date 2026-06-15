@@ -9,19 +9,19 @@ describe('BookStackPanel', () => {
 
   it('renders toggle button when closed', () => {
     render(<BookStackPanel isOpen={false} onToggle={() => {}} />)
-    const btn = screen.getByTitle('打开 BookStack 知识库')
+    const btn = screen.getByTitle('打开 Uantek 知识库')
     expect(btn).toBeDefined()
   })
 
   it('renders panel when open', () => {
     render(<BookStackPanel isOpen={true} onToggle={() => {}} />)
-    expect(screen.getByText('BookStack 知识库')).toBeDefined()
+    expect(screen.getByText('Uantek 知识库')).toBeDefined()
   })
 
   it('calls onToggle when toggle button clicked', () => {
     const onToggle = vi.fn()
     render(<BookStackPanel isOpen={false} onToggle={onToggle} />)
-    fireEvent.click(screen.getByTitle('打开 BookStack 知识库'))
+    fireEvent.click(screen.getByTitle('打开 Uantek 知识库'))
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
 
@@ -38,18 +38,25 @@ describe('BookStackPanel', () => {
     expect(screen.getByPlaceholderText('搜索知识库...')).toBeDefined()
   })
 
-  it('renders iframe when open', () => {
+  it('does not render iframe when no content is opened', () => {
     render(<BookStackPanel isOpen={true} onToggle={() => {}} />)
     const iframe = document.querySelector('iframe')
-    expect(iframe).not.toBeNull()
-    expect(iframe?.title).toBe('BookStack')
+    expect(iframe).toBeNull()
   })
 
-  it('navigates when initialUrl prop changes', () => {
+  it('opens content overlay when initialUrl prop changes', () => {
     const { rerender } = render(
+      <BookStackPanel isOpen={true} onToggle={() => {}} />
+    )
+    expect(document.querySelector('.bookstack-content-overlay')).toBeNull()
+
+    rerender(
       <BookStackPanel isOpen={true} onToggle={() => {}} initialUrl="http://localhost:6875/shelves" />
     )
-    const iframe = document.querySelector('iframe') as HTMLIFrameElement
+
+    const overlay = document.querySelector('.bookstack-content-overlay')
+    expect(overlay).not.toBeNull()
+    const iframe = overlay!.querySelector('iframe') as HTMLIFrameElement
     expect(iframe.src).toContain('/shelves')
   })
 
